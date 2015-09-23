@@ -10,11 +10,10 @@
 # This software consists of voluntary contributions made by many
 # individuals. For the exact contribution history, see the revision
 # history and logs, available at http://babel.edgewall.org/log/.
+import pytest
 
-import doctest
-import unittest
-
-from babel import plural
+from babel import plural, Locale
+from babel.messages.plurals import get_plural
 
 
 class test_plural_rule():
@@ -98,3 +97,18 @@ def test_locales_with_no_plural_rules_have_default():
     assert aa_plural(1) == 'other'
     assert aa_plural(2) == 'other'
     assert aa_plural(15) == 'other'
+
+
+@pytest.mark.parametrize(('locale', 'num_plurals', 'plural_expr'), [
+    (Locale('en'), 2, '(n != 1)'),
+    (Locale('en', 'US'), 2, '(n != 1)'),
+    (Locale('zh'), 1, '0'),
+    (Locale('zh', script='Hans'), 1, '0'),
+    (Locale('zh', script='Hant'), 1, '0'),
+    (Locale('zh', 'CN', 'Hans'), 1, '0'),
+    (Locale('zh', 'TW', 'Hant'), 1, '0'),
+])
+def test_get_plural(locale, num_plurals, plural_expr):
+    plurals = get_plural(locale)
+    assert plurals.num_plurals == num_plurals
+    assert plurals.plural_expr == plural_expr
