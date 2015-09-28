@@ -98,7 +98,8 @@ def get_territory_currencies(territory, start_date=None, end_date=None,
 
     >>> get_territory_currencies('US')
     ['USD']
-    >>> get_territory_currencies('US', tender=False, non_tender=True)
+    >>> get_territory_currencies('US', tender=False, non_tender=True,
+    ...                          start_date=date(2014, 1, 1))
     ['USN', 'USS']
 
     .. versionadded:: 2.0
@@ -134,6 +135,10 @@ def get_territory_currencies(territory, start_date=None, end_date=None,
 
     result = []
     for currency_code, start, end, is_tender in curs:
+        if start:
+            start = date_(*start)
+        if end:
+            end = date_(*end)
         if ((is_tender and tender) or \
             (not is_tender and non_tender)) and _is_active(start, end):
             if include_details:
@@ -251,17 +256,22 @@ def format_decimal(number, format=None, locale=LC_NUMERIC):
     return pattern.apply(number, locale)
 
 
-def format_currency(number, currency, format=None, locale=LC_NUMERIC):
+class UnknownCurrencyFormatError(KeyError):
+    """Exception raised when an unknown currency format is requested."""
+
+
+def format_currency(number, currency, format=None, locale=LC_NUMERIC,
+                    currency_digits=True, format_type='standard'):
     u"""Return formatted currency value.
 
     >>> format_currency(1099.98, 'USD', locale='en_US')
     u'$1,099.98'
     >>> format_currency(1099.98, 'USD', locale='es_CO')
-    u'1.099,98\\xa0US$'
+    u'US$1.099,98'
     >>> format_currency(1099.98, 'EUR', locale='de_DE')
     u'1.099,98\\xa0\\u20ac'
 
-    The pattern can also be specified explicitly.  The currency is
+    The format can also be specified explicitly.  The currency is
     placed with the '¤' sign.  As the sign gets repeated the format
     expands (¤ being the symbol, ¤¤ is the currency abbreviation and
     ¤¤¤ is the full name of the currency):
@@ -271,15 +281,62 @@ def format_currency(number, currency, format=None, locale=LC_NUMERIC):
     >>> format_currency(1099.98, 'EUR', u'#,##0.00 \xa4\xa4\xa4', locale='en_US')
     u'1,099.98 euros'
 
+    Currencies usually have a specific number of decimal digits. This function
+    favours that information over the given format:
+
+    >>> format_currency(1099.98, 'JPY', locale='en_US')
+    u'\\xa51,100'
+    >>> format_currency(1099.98, 'COP', u'#,##0.00', locale='es_ES')
+    u'1.100'
+
+    However, the number of decimal digits can be overriden from the currency
+    information, by setting the last parameter to ``True``:
+
+    >>> format_currency(1099.98, 'JPY', locale='en_US', currency_digits=False)
+    u'\\xa51,099.98'
+    >>> format_currency(1099.98, 'COP', u'#,##0.00', locale='es_ES', currency_digits=False)
+    u'1.099,98'
+
+    If a format is not specified the type of currency format to use
+    from the locale can be specified:
+
+    >>> format_currency(1099.98, 'EUR', locale='en_US', format_type='standard')
+    u'\\u20ac1,099.98'
+
+    When the given currency format type is not available, an exception is
+    raised:
+
+    >>> format_currency('1099.98', 'EUR', locale='root', format_type='unknown')
+    Traceback (most recent call last):
+        ...
+    UnknownCurrencyFormatError: "'unknown' is not a known currency format type"
+
     :param number: the number to format
     :param currency: the currency code
+    :param format: the format string to use
     :param locale: the `Locale` object or locale identifier
+    :param currency_digits: use the currency's number of decimal digits
+    :param format_type: the currency format type to use
     """
     locale = Locale.parse(locale)
-    if not format:
-        format = locale.currency_formats.get(format)
-    pattern = parse_pattern(format)
-    return pattern.apply(number, locale, currency=currency)
+    if format:
+        pattern = parse_pattern(format)
+    else:
+        try:
+            pattern = locale.currency_formats[format_type]
+        except KeyError:
+            raise UnknownCurrencyFormatError("%r is not a known currency format"
+                                             " type" % format_type)
+    if currency_digits:
+        fractions = get_global('currency_fractions')
+        try:
+            digits = fractions[currency][0]
+        except KeyError:
+            digits = fractions['DEFAULT'][0]
+        frac = (digits, digits)
+    else:
+        frac = None
+    return pattern.apply(number, locale, currency=currency, force_frac=frac)
 
 
 def format_percent(number, format=None, locale=LC_NUMERIC):
@@ -597,7 +654,8 @@ class NumberPattern(object):
     def __repr__(self):
         return '<%s %r>' % (type(self).__name__, self.pattern)
 
-    def apply(self, value, locale, currency=None):
+    def apply(self, value, locale, currency=None, force_frac=None):
+        frac_prec = force_frac or self.frac_prec
         if isinstance(value, float):
             value = Decimal(str(value))
         value *= self.scale
@@ -627,8 +685,7 @@ class NumberPattern(object):
                 exp_sign = get_plus_sign_symbol(locale)
             exp = abs(exp)
             number = u'%s%s%s%s' % \
-                 (self._format_sigdig(value, self.frac_prec[0],
-                                     self.frac_prec[1]),
+                 (self._format_sigdig(value, frac_prec[0], frac_prec[1]),
                   get_exponential_symbol(locale),  exp_sign,
                   self._format_int(str(exp), self.exp_prec[0],
                                    self.exp_prec[1], locale))
@@ -645,12 +702,11 @@ class NumberPattern(object):
             else:
                 number = self._format_int(text, 0, 1000, locale)
         else: # A normal number pattern
-            a, b = split_number(bankersround(abs(value),
-                                             self.frac_prec[1]))
+            a, b = split_number(bankersround(abs(value), frac_prec[1]))
             b = b or '0'
             a = self._format_int(a, self.int_prec[0],
                                  self.int_prec[1], locale)
-            b = self._format_frac(b, locale)
+            b = self._format_frac(b, locale, force_frac)
             number = a + b
         retval = u'%s%s%s' % (self.prefix[is_negative], number,
                                 self.suffix[is_negative])
@@ -700,8 +756,8 @@ class NumberPattern(object):
             gsize = self.grouping[1]
         return value + ret
 
-    def _format_frac(self, value, locale):
-        min, max = self.frac_prec
+    def _format_frac(self, value, locale, force_frac=None):
+        min, max = force_frac or self.frac_prec
         if len(value) < min:
             value += ('0' * (min - len(value)))
         if max == 0 or (min == 0 and int(value) == 0):

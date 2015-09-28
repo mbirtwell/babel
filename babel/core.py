@@ -544,7 +544,9 @@ class Locale(object):
     def currency_formats(self):
         """Locale patterns for currency number formatting.
 
-        >>> print Locale('en', 'US').currency_formats[None]
+        >>> print Locale('en', 'US').currency_formats['standard']
+        <NumberPattern u'\\xa4#,##0.00'>
+        >>> print Locale('en', 'US').currency_formats['accounting']
         <NumberPattern u'\\xa4#,##0.00'>
         """
         return self._data['currency_formats']
@@ -722,9 +724,22 @@ class Locale(object):
         >>> Locale('en').datetime_formats['full']
         u"{1} 'at' {0}"
         >>> Locale('th').datetime_formats['medium']
-        u'{1}, {0}'
+        u'{1} {0}'
         """
         return self._data['datetime_formats']
+
+    @property
+    def datetime_skeletons(self):
+        """Locale patterns for formatting parts of a datetime.
+
+        >>> Locale('en').datetime_skeletons['MEd']
+        <DateTimePattern u'E, M/d'>
+        >>> Locale('fr').datetime_skeletons['MEd']
+        <DateTimePattern u'E d/M'>
+        >>> Locale('fr').datetime_skeletons['H']
+        <DateTimePattern u"HH 'h'">
+        """
+        return self._data['datetime_skeletons']
 
     @property
     def plural_form(self):

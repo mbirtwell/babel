@@ -157,7 +157,9 @@ class TestLocaleClass:
         assert Locale('en', 'US').decimal_formats[None].pattern == '#,##0.###'
 
     def test_currency_formats_property(self):
-        assert (Locale('en', 'US').currency_formats[None].pattern ==
+        assert (Locale('en', 'US').currency_formats['standard'].pattern ==
+                u'\xa4#,##0.00')
+        assert (Locale('en', 'US').currency_formats['accounting'].pattern ==
                 u'\xa4#,##0.00')
 
     def test_percent_formats_property(self):
@@ -220,7 +222,7 @@ class TestLocaleClass:
 
     def test_datetime_formats_property(self):
         assert Locale('en').datetime_formats['full'] == u"{1} 'at' {0}"
-        assert Locale('th').datetime_formats['medium'] == u'{1}, {0}'
+        assert Locale('th').datetime_formats['medium'] == u'{1} {0}'
 
     def test_plural_form_property(self):
         assert Locale('en').plural_form(1) == 'one'
@@ -269,3 +271,29 @@ def test_parse_locale():
     assert core.parse_locale('en_US.UTF-8') == ('en', 'US', None, None)
     assert (core.parse_locale('de_DE.iso885915@euro') ==
             ('de', 'DE', None, None))
+
+def test_compatible_classes_in_global_and_localedata():
+    # Use pickle module rather than cPickle since cPickle.Unpickler is a method
+    # on Python 2
+    import pickle
+
+    class Unpickler(pickle.Unpickler):
+        def find_class(self, module, name):
+            # *.dat files must have compatible classes between Python 2 and 3
+            if module.split('.')[0] == 'babel':
+                return pickle.Unpickler.find_class(self, module, name)
+            raise pickle.UnpicklingError("global '%s.%s' is forbidden" %
+                                         (module, name))
+
+    def load(filename):
+        with open(filename, 'rb') as f:
+            return Unpickler(f).load()
+
+    load('babel/global.dat')
+    load('babel/locale-data/root.dat')
+    load('babel/locale-data/en.dat')
+    load('babel/locale-data/en_US.dat')
+    load('babel/locale-data/en_US_POSIX.dat')
+    load('babel/locale-data/zh_Hans_CN.dat')
+    load('babel/locale-data/zh_Hant_TW.dat')
+    load('babel/locale-data/es_419.dat')

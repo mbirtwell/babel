@@ -1,9 +1,16 @@
 # -*- coding: utf-8 -*-
 
-import os
 import sys
+if sys.version_info < (2, 6) or (3,) <= sys.version_info < (3, 3):
+    print("Babel requires Python 2.6, 2.7 or 3.3+")
+    sys.exit(1)
+
+
+import os
 import subprocess
 from setuptools import setup
+
+from babel import __version__
 
 sys.path.append(os.path.join('doc', 'common'))
 try:
@@ -32,7 +39,7 @@ class import_cldr(Command):
 
 setup(
     name='Babel',
-    version='2.0',
+    version=__version__,
     description='Internationalization utilities',
     long_description=\
 """A collection of tools for internationalizing Python applications.""",
@@ -55,7 +62,7 @@ setup(
         'Topic :: Software Development :: Libraries :: Python Modules',
     ],
     packages=['babel', 'babel.messages', 'babel.localtime'],
-    package_data={'babel': ['global.dat', 'localedata/*.dat']},
+    package_data={'babel': ['global.dat', 'locale-data/*.dat']},
     install_requires=[
         # This version identifier is currently necessary as
         # pytz otherwise does not install on pip 1.4 or

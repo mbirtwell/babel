@@ -21,7 +21,7 @@ from babel._compat import pickle
 
 _cache = {}
 _cache_lock = threading.RLock()
-_dirname = os.path.join(os.path.dirname(__file__), 'localedata')
+_dirname = os.path.join(os.path.dirname(__file__), 'locale-data')
 
 
 def exists(name):
@@ -81,11 +81,14 @@ def load(name, merge_inherited=True):
             if name == 'root' or not merge_inherited:
                 data = {}
             else:
-                parts = name.split('_')
-                if len(parts) == 1:
-                    parent = 'root'
-                else:
-                    parent = '_'.join(parts[:-1])
+                from babel.core import get_global
+                parent = get_global('parent_exceptions').get(name)
+                if not parent:
+                    parts = name.split('_')
+                    if len(parts) == 1:
+                        parent = 'root'
+                    else:
+                        parent = '_'.join(parts[:-1])
                 data = load(parent).copy()
             filename = os.path.join(_dirname, '%s.dat' % name)
             fileobj = open(filename, 'rb')

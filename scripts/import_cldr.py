@@ -21,8 +21,6 @@ try:
 except ImportError:
     from xml.etree import ElementTree
 
-from datetime import date
-
 # Make sure we're using Babel source, and not some previously installed version
 sys.path.insert(0, os.path.join(os.path.dirname(sys.argv[0]), '..'))
 
@@ -103,12 +101,12 @@ def _parse_currency_date(s):
     if not s:
         return None
     parts = s.split('-', 2)
-    return date(*map(int, parts + [1] * (3 - len(parts))))
+    return tuple(map(int, parts + [1] * (3 - len(parts))))
 
 
 def _currency_sort_key(tup):
     code, start, end, tender = tup
-    return int(not tender), start or date(1, 1, 1)
+    return int(not tender), start or (1, 1, 1)
 
 
 def main():
@@ -145,6 +143,8 @@ def main():
         variant_aliases = global_data.setdefault('variant_aliases', {})
         likely_subtags = global_data.setdefault('likely_subtags', {})
         territory_currencies = global_data.setdefault('territory_currencies', {})
+        parent_exceptions = global_data.setdefault('parent_exceptions', {})
+        currency_fractions = global_data.setdefault('currency_fractions', {})
 
         # create auxiliary zone->territory map from the windows zones (we don't set
         # the 'zones_territories' map directly here, because there are some zones
@@ -163,13 +163,14 @@ def main():
         for key_elem in bcp47_timezone.findall('.//keyword/key'):
             if key_elem.attrib['name'] == 'tz':
                 for elem in key_elem.findall('type'):
-                    aliases = text_type(elem.attrib['alias']).split()
-                    tzid = aliases.pop(0)
-                    territory = _zone_territory_map.get(tzid, '001')
-                    territory_zones.setdefault(territory, []).append(tzid)
-                    zone_territories[tzid] = territory
-                    for alias in aliases:
-                        zone_aliases[alias] = tzid
+                    if 'deprecated' not in elem.attrib:
+                        aliases = text_type(elem.attrib['alias']).split()
+                        tzid = aliases.pop(0)
+                        territory = _zone_territory_map.get(tzid, '001')
+                        territory_zones.setdefault(territory, []).append(tzid)
+                        zone_territories[tzid] = territory
+                        for alias in aliases:
+                            zone_aliases[alias] = tzid
                 break
 
         # Import Metazone mapping
@@ -184,7 +185,7 @@ def main():
         for alias in sup_metadata.findall('.//alias/languageAlias'):
             # We don't have a use for those at the moment.  They don't
             # pass our parser anyways.
-            if '-' in alias.attrib['type']:
+            if '_' in alias.attrib['type']:
                 continue
             language_aliases[alias.attrib['type']] = alias.attrib['replacement']
 
@@ -221,6 +222,21 @@ def main():
                                               'tender', 'true') == 'true'))
             region_currencies.sort(key=_currency_sort_key)
             territory_currencies[region_code] = region_currencies
+
+        # Explicit parent locales
+        for paternity in sup.findall('.//parentLocales/parentLocale'):
+            parent = paternity.attrib['parent']
+            for child in paternity.attrib['locales'].split():
+                parent_exceptions[child] = parent
+
+        # Currency decimal and rounding digits
+        for fraction in sup.findall('.//currencyData/fractions/info'):
+            cur_code = fraction.attrib['iso4217']
+            cur_digits = int(fraction.attrib['digits'])
+            cur_rounding = int(fraction.attrib['rounding'])
+            cur_cdigits = int(fraction.attrib.get('cashDigits', cur_digits))
+            cur_crounding = int(fraction.attrib.get('cashRounding', cur_rounding))
+            currency_fractions[cur_code] = (cur_digits, cur_rounding, cur_cdigits, cur_crounding)
 
         outfile = open(global_path, 'wb')
         try:
@@ -265,7 +281,7 @@ def main():
             continue
 
         full_filename = os.path.join(srcdir, 'main', filename)
-        data_filename = os.path.join(destdir, 'localedata', stem + '.dat')
+        data_filename = os.path.join(destdir, 'locale-data', stem + '.dat')
 
         data = {}
         if not need_conversion(data_filename, data, full_filename):
@@ -524,6 +540,7 @@ def main():
                         )
 
             datetime_formats = data.setdefault('datetime_formats', {})
+            datetime_skeletons = data.setdefault('datetime_skeletons', {})
             for format in calendar.findall('dateTimeFormats'):
                 for elem in format.getiterator():
                     if elem.tag == 'dateTimeFormatLength':
@@ -539,6 +556,10 @@ def main():
                         datetime_formats = Alias(_translate_alias(
                             ['datetime_formats'], elem.attrib['path'])
                         )
+                    elif elem.tag == 'availableFormats':
+                        for datetime_skeleton in elem.findall('dateFormatItem'):
+                            datetime_skeletons[datetime_skeleton.attrib['id']] = \
+                                dates.parse_pattern(text_type(datetime_skeleton.text))
 
         # <numbers>
 
@@ -570,13 +591,20 @@ def main():
                 numbers.parse_pattern(pattern)
 
         currency_formats = data.setdefault('currency_formats', {})
-        for elem in tree.findall('.//currencyFormats/currencyFormatLength'):
+        for elem in tree.findall('.//currencyFormats/currencyFormatLength/currencyFormat'):
             if ('draft' in elem.attrib or 'alt' in elem.attrib) \
                     and elem.attrib.get('type') in currency_formats:
                 continue
-            pattern = text_type(elem.findtext('currencyFormat/pattern'))
-            currency_formats[elem.attrib.get('type')] = \
-                numbers.parse_pattern(pattern)
+            for child in elem.getiterator():
+                if child.tag == 'alias':
+                    currency_formats[elem.attrib.get('type')] = Alias(
+                        _translate_alias(['currency_formats', elem.attrib['type']],
+                                         child.attrib['path'])
+                    )
+                elif child.tag == 'pattern':
+                    pattern = text_type(child.text)
+                    currency_formats[elem.attrib.get('type')] = \
+                        numbers.parse_pattern(pattern)
 
         percent_formats = data.setdefault('percent_formats', {})
         for elem in tree.findall('.//percentFormats/percentFormatLength'):
@@ -609,14 +637,25 @@ def main():
         # <units>
 
         unit_patterns = data.setdefault('unit_patterns', {})
-        for elem in tree.findall('.//units/unit'):
-            unit_type = elem.attrib['type']
-            for pattern in elem.findall('unitPattern'):
-                box = unit_type
-                if 'alt' in pattern.attrib:
-                    box += ':' + pattern.attrib['alt']
-                unit_patterns.setdefault(box, {})[pattern.attrib['count']] = \
-                    text_type(pattern.text)
+        for elem in tree.findall('.//units/unitLength'):
+            unit_length_type = elem.attrib['type']
+            for unit in elem.findall('unit'):
+                unit_type = unit.attrib['type']
+                for pattern in unit.findall('unitPattern'):
+                    box = unit_type
+                    box += ':' + unit_length_type
+                    unit_patterns.setdefault(box, {})[pattern.attrib['count']] = \
+                        text_type(pattern.text)
+
+        date_fields = data.setdefault('date_fields', {})
+        for elem in tree.findall('.//dates/fields/field'):
+            field_type = elem.attrib['type']
+            date_fields.setdefault(field_type, {})
+            for rel_time in elem.findall('relativeTime'):
+                rel_time_type = rel_time.attrib['type']
+                for pattern in rel_time.findall('relativeTimePattern'):
+                    date_fields[field_type].setdefault(rel_time_type, {})\
+                        [pattern.attrib['count']] = text_type(pattern.text)
 
         outfile = open(data_filename, 'wb')
         try:
