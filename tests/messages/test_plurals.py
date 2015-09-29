@@ -38,3 +38,8 @@ def test_get_plural():
         tup = plurals.get_plural(locale)
         assert tup.num_plurals == num_plurals
         assert tup.plural_expr == plural_expr
+
+
+def test_get_plural_falls_back_to_default():
+
+    assert plurals.get_plural('aa') == (2, '(n != 1)')
