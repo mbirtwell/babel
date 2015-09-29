@@ -256,18 +256,3 @@ def test_extract_operands(source, n, i, v, w, f, t):
     source = decimal.Decimal(source) if isinstance(source, str) else source
     assert (plural.extract_operands(source) ==
             decimal.Decimal(n), i, v, w, f, t)
-
-
-@pytest.mark.parametrize(('locale', 'num_plurals', 'plural_expr'), [
-    (Locale('en'), 2, '(n != 1)'),
-    (Locale('en', 'US'), 2, '(n != 1)'),
-    (Locale('zh'), 1, '0'),
-    (Locale('zh', script='Hans'), 1, '0'),
-    (Locale('zh', script='Hant'), 1, '0'),
-    (Locale('zh', 'CN', 'Hans'), 1, '0'),
-    (Locale('zh', 'TW', 'Hant'), 1, '0'),
-])
-def test_get_plural(locale, num_plurals, plural_expr):
-    plurals = get_plural(locale)
-    assert plurals.num_plurals == num_plurals
-    assert plurals.plural_expr == plural_expr

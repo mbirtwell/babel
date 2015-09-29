@@ -11,9 +11,7 @@
 # individuals. For the exact contribution history, see the revision
 # history and logs, available at http://babel.edgewall.org/log/.
 
-import doctest
-import unittest
-
+from babel import Locale
 from babel.messages import plurals
 
 
@@ -26,3 +24,17 @@ def test_get_plural():
     assert tup.plural_expr == '0'
     assert tup.plural_forms == 'npurals=1; plural=0'
     assert str(tup) == 'npurals=1; plural=0'
+
+    for locale, num_plurals, plural_expr in [
+        (Locale('en'), 2, '(n != 1)'),
+        (Locale('en', 'US'), 2, '(n != 1)'),
+        (Locale('zh'), 1, '0'),
+        (Locale('zh', script='Hans'), 1, '0'),
+        (Locale('zh', script='Hant'), 1, '0'),
+        (Locale('zh', 'CN', 'Hans'), 1, '0'),
+        (Locale('zh', 'TW', 'Hant'), 1, '0'),
+
+    ]:
+        tup = plurals.get_plural(locale)
+        assert tup.num_plurals == num_plurals
+        assert tup.plural_expr == plural_expr
