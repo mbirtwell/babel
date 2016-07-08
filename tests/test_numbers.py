@@ -11,20 +11,20 @@
 # individuals. For the exact contribution history, see the revision
 # history and logs, available at http://babel.edgewall.org/log/.
 
-from decimal import Decimal
 import unittest
 import pytest
 
 from datetime import date
 
 from babel import numbers
+from babel._compat import Decimal
 
 
 class FormatDecimalTestCase(unittest.TestCase):
 
     def test_patterns(self):
         self.assertEqual(numbers.format_decimal(12345, '##0',
-                         locale='en_US'), '12345')
+                                                locale='en_US'), '12345')
         self.assertEqual(numbers.format_decimal(6.5, '0.00', locale='sv'),
                          '6,50')
         self.assertEqual(numbers.format_decimal(10.0**20,
@@ -35,13 +35,13 @@ class FormatDecimalTestCase(unittest.TestCase):
         # significant digits
         self.assertEqual(u'12,345,678.05',
                          numbers.format_decimal(12345678.051, '#,##0.00',
-                         locale='en_US'))
+                                                locale='en_US'))
 
     def test_subpatterns(self):
         self.assertEqual(numbers.format_decimal(-12345, '#,##0.##;-#',
-                         locale='en_US'), '-12,345')
+                                                locale='en_US'), '-12,345')
         self.assertEqual(numbers.format_decimal(-12345, '#,##0.##;(#)',
-                         locale='en_US'), '(12,345)')
+                                                locale='en_US'), '(12,345)')
 
     def test_default_rounding(self):
         """
@@ -57,8 +57,8 @@ class FormatDecimalTestCase(unittest.TestCase):
 
     def test_significant_digits(self):
         """Test significant digits patterns"""
-        self.assertEqual(numbers.format_decimal(123004, '@@',locale='en_US'),
-                        '120000')
+        self.assertEqual(numbers.format_decimal(123004, '@@', locale='en_US'),
+                         '120000')
         self.assertEqual(numbers.format_decimal(1.12, '@', locale='sv'), '1')
         self.assertEqual(numbers.format_decimal(1.1, '@@', locale='sv'), '1,1')
         self.assertEqual(numbers.format_decimal(1.1, '@@@@@##', locale='sv'),
@@ -67,27 +67,27 @@ class FormatDecimalTestCase(unittest.TestCase):
                          '0,000100')
         self.assertEqual(numbers.format_decimal(0.0001234, '@@@', locale='sv'),
                          '0,000123')
-        self.assertEqual(numbers.format_decimal(0.0001234, '@@@#',locale='sv'),
+        self.assertEqual(numbers.format_decimal(0.0001234, '@@@#', locale='sv'),
                          '0,0001234')
-        self.assertEqual(numbers.format_decimal(0.0001234, '@@@#',locale='sv'),
+        self.assertEqual(numbers.format_decimal(0.0001234, '@@@#', locale='sv'),
                          '0,0001234')
-        self.assertEqual(numbers.format_decimal(0.12345, '@@@',locale='sv'),
+        self.assertEqual(numbers.format_decimal(0.12345, '@@@', locale='sv'),
                          '0,123')
-        self.assertEqual(numbers.format_decimal(3.14159, '@@##',locale='sv'),
+        self.assertEqual(numbers.format_decimal(3.14159, '@@##', locale='sv'),
                          '3,142')
-        self.assertEqual(numbers.format_decimal(1.23004, '@@##',locale='sv'),
+        self.assertEqual(numbers.format_decimal(1.23004, '@@##', locale='sv'),
                          '1,23')
-        self.assertEqual(numbers.format_decimal(1230.04, '@@,@@',locale='en_US'),
+        self.assertEqual(numbers.format_decimal(1230.04, '@@,@@', locale='en_US'),
                          '12,30')
-        self.assertEqual(numbers.format_decimal(123.41, '@@##',locale='en_US'),
+        self.assertEqual(numbers.format_decimal(123.41, '@@##', locale='en_US'),
                          '123.4')
-        self.assertEqual(numbers.format_decimal(1, '@@',locale='en_US'),
+        self.assertEqual(numbers.format_decimal(1, '@@', locale='en_US'),
                          '1.0')
-        self.assertEqual(numbers.format_decimal(0, '@',locale='en_US'),
+        self.assertEqual(numbers.format_decimal(0, '@', locale='en_US'),
                          '0')
-        self.assertEqual(numbers.format_decimal(0.1, '@',locale='en_US'),
+        self.assertEqual(numbers.format_decimal(0.1, '@', locale='en_US'),
                          '0.1')
-        self.assertEqual(numbers.format_decimal(0.1, '@#',locale='en_US'),
+        self.assertEqual(numbers.format_decimal(0.1, '@#', locale='en_US'),
                          '0.1')
         self.assertEqual(numbers.format_decimal(0.1, '@@', locale='en_US'),
                          '0.10')
@@ -137,7 +137,7 @@ class FormatDecimalTestCase(unittest.TestCase):
         fmt = numbers.format_scientific(0.012345, '#.##E00 m/s', locale='en_US')
         self.assertEqual(fmt, '1.23E-02 m/s')
         fmt = numbers.format_scientific(Decimal('12345'), '#.##E+00 m/s',
-        locale='en_US')
+                                        locale='en_US')
         self.assertEqual(fmt, '1.23E+04 m/s')
         # 0 (see ticket #99)
         fmt = numbers.format_scientific(0, '#E0', locale='en_US')
@@ -151,25 +151,13 @@ class FormatDecimalTestCase(unittest.TestCase):
         self.assertEqual('0.000000700', fmt)
 
 
-class BankersRoundTestCase(unittest.TestCase):
-    def test_round_to_nearest_integer(self):
-        self.assertEqual(1, numbers.bankersround(Decimal('0.5001')))
-
-    def test_round_to_even_for_two_nearest_integers(self):
-        self.assertEqual(0, numbers.bankersround(Decimal('0.5')))
-        self.assertEqual(2, numbers.bankersround(Decimal('1.5')))
-        self.assertEqual(-2, numbers.bankersround(Decimal('-2.5')))
-
-        self.assertEqual(0, numbers.bankersround(Decimal('0.05'), ndigits=1))
-        self.assertEqual(Decimal('0.2'), numbers.bankersround(Decimal('0.15'), ndigits=1))
-
-
 class NumberParsingTestCase(unittest.TestCase):
+
     def test_can_parse_decimals(self):
         self.assertEqual(Decimal('1099.98'),
-            numbers.parse_decimal('1,099.98', locale='en_US'))
+                         numbers.parse_decimal('1,099.98', locale='en_US'))
         self.assertEqual(Decimal('1099.98'),
-            numbers.parse_decimal('1.099,98', locale='de'))
+                         numbers.parse_decimal('1.099,98', locale='de'))
         self.assertRaises(numbers.NumberFormatError,
                           lambda: numbers.parse_decimal('2,109,998', locale='de'))
 
@@ -189,15 +177,15 @@ def test_get_territory_currencies():
 
     assert numbers.get_territory_currencies('US', date(2013, 1, 1)) == ['USD']
     assert sorted(numbers.get_territory_currencies('US', date(2013, 1, 1),
-        non_tender=True)) == ['USD', 'USN', 'USS']
+                                                   non_tender=True)) == ['USD', 'USN', 'USS']
 
     assert numbers.get_territory_currencies('US', date(2013, 1, 1),
-        include_details=True) == [{
-            'currency': 'USD',
-            'from': date(1792, 1, 1),
-            'to': None,
-            'tender': True
-        }]
+                                            include_details=True) == [{
+                                                'currency': 'USD',
+                                                'from': date(1792, 1, 1),
+                                                'to': None,
+                                                'tender': True
+                                            }]
 
     assert numbers.get_territory_currencies('LS', date(2013, 1, 1)) == ['ZAR', 'LSL']
 
@@ -243,7 +231,7 @@ def test_format_currency():
     assert (numbers.format_currency(1099.98, 'USD', locale='en_US')
             == u'$1,099.98')
     assert (numbers.format_currency(1099.98, 'USD', locale='es_CO')
-            == u'US$1.099,98')
+            == u'US$\xa01.099,98')
     assert (numbers.format_currency(1099.98, 'EUR', locale='de_DE')
             == u'1.099,98\xa0\u20ac')
     assert (numbers.format_currency(1099.98, 'EUR', u'\xa4\xa4 #,##0.00',
@@ -267,7 +255,7 @@ def test_format_currency_format_type():
 
     with pytest.raises(numbers.UnknownCurrencyFormatError) as excinfo:
         numbers.format_currency(1099.98, 'USD', locale='en_US',
-                                    format_type='unknown')
+                                format_type='unknown')
     assert excinfo.value.args[0] == "'unknown' is not a known currency format type"
 
     assert (numbers.format_currency(1099.98, 'JPY', locale='en_US')
@@ -284,6 +272,8 @@ def test_format_currency_format_type():
 
 def test_format_percent():
     assert numbers.format_percent(0.34, locale='en_US') == u'34%'
+    assert numbers.format_percent(0.34, u'##0%', locale='en_US') == u'34%'
+    assert numbers.format_percent(34, u'##0', locale='en_US') == u'34'
     assert numbers.format_percent(25.1234, locale='en_US') == u'2,512%'
     assert (numbers.format_percent(25.1234, locale='sv_SE')
             == u'2\xa0512\xa0%')
@@ -320,13 +310,6 @@ def test_parse_decimal():
     assert excinfo.value.args[0] == "'2,109,998' is not a valid decimal number"
 
 
-def test_bankersround():
-    assert numbers.bankersround(5.5, 0) == 6.0
-    assert numbers.bankersround(6.5, 0) == 6.0
-    assert numbers.bankersround(-6.5, 0) == -6.0
-    assert numbers.bankersround(1234.0, -2) == 1200.0
-
-
 def test_parse_grouping():
     assert numbers.parse_grouping('##') == (1000, 1000)
     assert numbers.parse_grouping('#,###') == (3, 3)
@@ -334,5 +317,47 @@ def test_parse_grouping():
 
 
 def test_parse_pattern():
-    assert numbers.parse_pattern(u'¤#,##0.00;(¤#,##0.00)').suffix == (u'', u')')
-    assert numbers.parse_pattern(u'¤ #,##0.00;¤ #,##0.00-').suffix == (u'', u'-')
+
+    # Original pattern is preserved
+    np = numbers.parse_pattern(u'¤#,##0.00')
+    assert np.pattern == u'¤#,##0.00'
+
+    np = numbers.parse_pattern(u'¤#,##0.00;(¤#,##0.00)')
+    assert np.pattern == u'¤#,##0.00;(¤#,##0.00)'
+
+    # Given a NumberPattern object, we don't return a new instance.
+    # However, we don't cache NumberPattern objects, so calling
+    # parse_pattern with the same format string will create new
+    # instances
+    np1 = numbers.parse_pattern(u'¤ #,##0.00')
+    np2 = numbers.parse_pattern(u'¤ #,##0.00')
+    assert np1 is not np2
+    assert np1 is numbers.parse_pattern(np1)
+
+
+def test_parse_pattern_negative():
+
+    # No negative format specified
+    np = numbers.parse_pattern(u'¤#,##0.00')
+    assert np.prefix == (u'¤', u'-¤')
+    assert np.suffix == (u'', u'')
+
+    # Negative format is specified
+    np = numbers.parse_pattern(u'¤#,##0.00;(¤#,##0.00)')
+    assert np.prefix == (u'¤', u'(¤')
+    assert np.suffix == (u'', u')')
+
+    # Negative sign is a suffix
+    np = numbers.parse_pattern(u'¤ #,##0.00;¤ #,##0.00-')
+    assert np.prefix == (u'¤ ', u'¤ ')
+    assert np.suffix == (u'', u'-')
+
+
+def test_numberpattern_repr():
+    """repr() outputs the pattern string"""
+
+    # This implementation looks a bit funny, but that's cause strings are
+    # repr'd differently in Python 2 vs 3 and this test runs under both.
+    format = u'¤#,##0.00;(¤#,##0.00)'
+    np = numbers.parse_pattern(format)
+    assert repr(format) in repr(np)

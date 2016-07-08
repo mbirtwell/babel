@@ -17,6 +17,10 @@ Date and Time Formatting
 
 .. autofunction:: format_timedelta
 
+.. autofunction:: format_skeleton
+
+.. autofunction:: format_interval
+
 Timezone Functionality
 ----------------------
 

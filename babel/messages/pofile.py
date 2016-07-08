@@ -10,6 +10,7 @@
     :license: BSD, see LICENSE for more details.
 """
 
+from __future__ import print_function
 import os
 import re
 
@@ -21,7 +22,7 @@ from babel._compat import text_type
 def unescape(string):
     r"""Reverse `escape` the given string.
 
-    >>> print unescape('"Say:\\n  \\"hello, world!\\"\\n"')
+    >>> print(unescape('"Say:\\n  \\"hello, world!\\"\\n"'))
     Say:
       "hello, world!"
     <BLANKLINE>
@@ -44,18 +45,18 @@ def unescape(string):
 def denormalize(string):
     r"""Reverse the normalization done by the `normalize` function.
 
-    >>> print denormalize(r'''""
+    >>> print(denormalize(r'''""
     ... "Say:\n"
-    ... "  \"hello, world!\"\n"''')
+    ... "  \"hello, world!\"\n"'''))
     Say:
       "hello, world!"
     <BLANKLINE>
 
-    >>> print denormalize(r'''""
+    >>> print(denormalize(r'''""
     ... "Say:\n"
     ... "  \"Lorem ipsum dolor sit "
     ... "amet, consectetur adipisicing"
-    ... " elit, \"\n"''')
+    ... " elit, \"\n"'''))
     Say:
       "Lorem ipsum dolor sit amet, consectetur adipisicing elit, "
     <BLANKLINE>
@@ -72,12 +73,157 @@ def denormalize(string):
         return unescape(string)
 
 
+class _PoFileParser(object):
+
+    def __init__(self, locale=None, domain=None, ignore_obsolete=False, charset=None):
+        self.ignore_obsolete = ignore_obsolete
+        self.catalog = Catalog(locale=locale, domain=domain, charset=charset)
+        self.counter = 0
+        self.offset = 0
+        self.messages = []
+        self.translations = []
+        self.locations = []
+        self.flags = []
+        self.user_comments = []
+        self.auto_comments = []
+        self.obsolete = False
+        self.context = []
+        self.in_msgid = False
+        self.in_msgstr = False
+        self.in_msgctxt = False
+
+    def _add_message(self):
+        self.translations.sort()
+        if len(self.messages) > 1:
+            msgid = tuple([denormalize(m) for m in self.messages])
+        else:
+            msgid = denormalize(self.messages[0])
+        if isinstance(msgid, (list, tuple)):
+            string = []
+            for idx in range(self.catalog.num_plurals):
+                try:
+                    string.append(self.translations[idx])
+                except IndexError:
+                    string.append((idx, ''))
+            string = tuple([denormalize(t[1]) for t in string])
+        else:
+            string = denormalize(self.translations[0][1])
+        if self.context:
+            msgctxt = denormalize('\n'.join(self.context))
+        else:
+            msgctxt = None
+        message = Message(msgid, string, list(self.locations), set(self.flags),
+                          self.auto_comments, self.user_comments, lineno=self.offset + 1,
+                          context=msgctxt)
+        if self.obsolete:
+            if not self.ignore_obsolete:
+                self.catalog.obsolete[msgid] = message
+        else:
+            self.catalog[msgid] = message
+        del self.messages[:]
+        del self.translations[:]
+        del self.context[:]
+        del self.locations[:]
+        del self.flags[:]
+        del self.auto_comments[:]
+        del self.user_comments[:]
+        self.obsolete = False
+        self.counter += 1
+
+    def _process_message_line(self, lineno, line):
+        if line.startswith('msgid_plural'):
+            self.in_msgid = True
+            msg = line[12:].lstrip()
+            self.messages.append(msg)
+        elif line.startswith('msgid'):
+            self.in_msgid = True
+            self.offset = lineno
+            txt = line[5:].lstrip()
+            if self.messages:
+                self._add_message()
+            self.messages.append(txt)
+        elif line.startswith('msgstr'):
+            self.in_msgid = False
+            self.in_msgstr = True
+            msg = line[6:].lstrip()
+            if msg.startswith('['):
+                idx, msg = msg[1:].split(']', 1)
+                self.translations.append([int(idx), msg.lstrip()])
+            else:
+                self.translations.append([0, msg])
+        elif line.startswith('msgctxt'):
+            if self.messages:
+                self._add_message()
+            self.in_msgid = self.in_msgstr = False
+            self.context.append(line[7:].lstrip())
+        elif line.startswith('"'):
+            if self.in_msgid:
+                self.messages[-1] += u'\n' + line.rstrip()
+            elif self.in_msgstr:
+                self.translations[-1][1] += u'\n' + line.rstrip()
+            elif self.in_msgctxt:
+                self.context.append(line.rstrip())
+
+    def _process_comment(self, line):
+
+        self.in_msgid = self.in_msgstr = False
+        if self.messages and self.translations:
+            self._add_message()
+        if line[1:].startswith(':'):
+            for location in line[2:].lstrip().split():
+                pos = location.rfind(':')
+                if pos >= 0:
+                    try:
+                        lineno = int(location[pos + 1:])
+                    except ValueError:
+                        continue
+                    self.locations.append((location[:pos], lineno))
+                else:
+                    self.locations.append((location, None))
+        elif line[1:].startswith(','):
+            for flag in line[2:].lstrip().split(','):
+                self.flags.append(flag.strip())
+        elif line[1:].startswith('.'):
+            # These are called auto-comments
+            comment = line[2:].strip()
+            if comment:  # Just check that we're not adding empty comments
+                self.auto_comments.append(comment)
+        else:
+            # These are called user comments
+            self.user_comments.append(line[1:].strip())
+
+    def parse(self, fileobj):
+
+        for lineno, line in enumerate(fileobj.readlines()):
+            line = line.strip()
+            if not isinstance(line, text_type):
+                line = line.decode(self.catalog.charset)
+            if line.startswith('#'):
+                if line[1:].startswith('~'):
+                    self.obsolete = True
+                    self._process_message_line(lineno, line[2:].lstrip())
+                else:
+                    self._process_comment(line)
+            else:
+                self._process_message_line(lineno, line)
+
+        if self.messages:
+            self._add_message()
+
+        # No actual messages found, but there was some info in comments, from which
+        # we'll construct an empty header message
+        elif not self.counter and (self.flags or self.user_comments or self.auto_comments):
+            self.messages.append(u'')
+            self.translations.append([0, u''])
+            self._add_message()
+
+
 def read_po(fileobj, locale=None, domain=None, ignore_obsolete=False, charset=None):
     """Read messages from a ``gettext`` PO (portable object) file from the given
     file-like object and return a `Catalog`.
 
     >>> from datetime import datetime
-    >>> from StringIO import StringIO
+    >>> from babel._compat import StringIO
     >>> buf = StringIO('''
     ... #: main.py:1
     ... #, fuzzy, python-format
@@ -93,13 +239,13 @@ def read_po(fileobj, locale=None, domain=None, ignore_obsolete=False, charset=No
     ... msgstr[1] "baaz"
     ... ''')
     >>> catalog = read_po(buf)
-    >>> catalog.revision_date = datetime(2007, 04, 01)
+    >>> catalog.revision_date = datetime(2007, 4, 1)
 
     >>> for message in catalog:
     ...     if message.id:
-    ...         print (message.id, message.string)
-    ...         print ' ', (message.locations, sorted(list(message.flags)))
-    ...         print ' ', (message.user_comments, message.auto_comments)
+    ...         print((message.id, message.string))
+    ...         print(' ', (message.locations, sorted(list(message.flags))))
+    ...         print(' ', (message.user_comments, message.auto_comments))
     (u'foo %(name)s', u'quux %(name)s')
       ([(u'main.py', 1)], [u'fuzzy', u'python-format'])
       ([], [])
@@ -118,141 +264,16 @@ def read_po(fileobj, locale=None, domain=None, ignore_obsolete=False, charset=No
     :param ignore_obsolete: whether to ignore obsolete messages in the input
     :param charset: the character set of the catalog.
     """
-    catalog = Catalog(locale=locale, domain=domain, charset=charset)
-
-    counter = [0]
-    offset = [0]
-    messages = []
-    translations = []
-    locations = []
-    flags = []
-    user_comments = []
-    auto_comments = []
-    obsolete = [False]
-    context = []
-    in_msgid = [False]
-    in_msgstr = [False]
-    in_msgctxt = [False]
-
-    def _add_message():
-        translations.sort()
-        if len(messages) > 1:
-            msgid = tuple([denormalize(m) for m in messages])
-        else:
-            msgid = denormalize(messages[0])
-        if isinstance(msgid, (list, tuple)):
-            string = []
-            for idx in range(catalog.num_plurals):
-                try:
-                    string.append(translations[idx])
-                except IndexError:
-                    string.append((idx, ''))
-            string = tuple([denormalize(t[1]) for t in string])
-        else:
-            string = denormalize(translations[0][1])
-        if context:
-            msgctxt = denormalize('\n'.join(context))
-        else:
-            msgctxt = None
-        message = Message(msgid, string, list(locations), set(flags),
-                          auto_comments, user_comments, lineno=offset[0] + 1,
-                          context=msgctxt)
-        if obsolete[0]:
-            if not ignore_obsolete:
-                catalog.obsolete[msgid] = message
-        else:
-            catalog[msgid] = message
-        del messages[:]; del translations[:]; del context[:]; del locations[:];
-        del flags[:]; del auto_comments[:]; del user_comments[:];
-        obsolete[0] = False
-        counter[0] += 1
-
-    def _process_message_line(lineno, line):
-        if line.startswith('msgid_plural'):
-            in_msgid[0] = True
-            msg = line[12:].lstrip()
-            messages.append(msg)
-        elif line.startswith('msgid'):
-            in_msgid[0] = True
-            offset[0] = lineno
-            txt = line[5:].lstrip()
-            if messages:
-                _add_message()
-            messages.append(txt)
-        elif line.startswith('msgstr'):
-            in_msgid[0] = False
-            in_msgstr[0] = True
-            msg = line[6:].lstrip()
-            if msg.startswith('['):
-                idx, msg = msg[1:].split(']', 1)
-                translations.append([int(idx), msg.lstrip()])
-            else:
-                translations.append([0, msg])
-        elif line.startswith('msgctxt'):
-            if messages:
-                _add_message()
-            in_msgid[0] = in_msgstr[0] = False
-            context.append(line[7:].lstrip())
-        elif line.startswith('"'):
-            if in_msgid[0]:
-                messages[-1] += u'\n' + line.rstrip()
-            elif in_msgstr[0]:
-                translations[-1][1] += u'\n' + line.rstrip()
-            elif in_msgctxt[0]:
-                context.append(line.rstrip())
-
-    for lineno, line in enumerate(fileobj.readlines()):
-        line = line.strip()
-        if not isinstance(line, text_type):
-            line = line.decode(catalog.charset)
-        if line.startswith('#'):
-            in_msgid[0] = in_msgstr[0] = False
-            if messages and translations:
-                _add_message()
-            if line[1:].startswith(':'):
-                for location in line[2:].lstrip().split():
-                    pos = location.rfind(':')
-                    if pos >= 0:
-                        try:
-                            lineno = int(location[pos + 1:])
-                        except ValueError:
-                            continue
-                        locations.append((location[:pos], lineno))
-            elif line[1:].startswith(','):
-                for flag in line[2:].lstrip().split(','):
-                    flags.append(flag.strip())
-            elif line[1:].startswith('~'):
-                obsolete[0] = True
-                _process_message_line(lineno, line[2:].lstrip())
-            elif line[1:].startswith('.'):
-                # These are called auto-comments
-                comment = line[2:].strip()
-                if comment: # Just check that we're not adding empty comments
-                    auto_comments.append(comment)
-            else:
-                # These are called user comments
-                user_comments.append(line[1:].strip())
-        else:
-            _process_message_line(lineno, line)
-
-    if messages:
-        _add_message()
-
-    # No actual messages found, but there was some info in comments, from which
-    # we'll construct an empty header message
-    elif not counter[0] and (flags or user_comments or auto_comments):
-        messages.append(u'')
-        translations.append([0, u''])
-        _add_message()
-
-    return catalog
+    parser = _PoFileParser(locale, domain, ignore_obsolete, charset)
+    parser.parse(fileobj)
+    return parser.catalog
 
 
 WORD_SEP = re.compile('('
-    r'\s+|'                                 # any whitespace
-    r'[^\s\w]*\w+[a-zA-Z]-(?=\w+[a-zA-Z])|' # hyphenated words
-    r'(?<=[\w\!\"\'\&\.\,\?])-{2,}(?=\w)'   # em-dash
-')')
+                      r'\s+|'                                 # any whitespace
+                      r'[^\s\w]*\w+[a-zA-Z]-(?=\w+[a-zA-Z])|'  # hyphenated words
+                      r'(?<=[\w\!\"\'\&\.\,\?])-{2,}(?=\w)'   # em-dash
+                      ')')
 
 
 def escape(string):
@@ -276,16 +297,16 @@ def escape(string):
 def normalize(string, prefix='', width=76):
     r"""Convert a string into a format that is appropriate for .po files.
 
-    >>> print normalize('''Say:
+    >>> print(normalize('''Say:
     ...   "hello, world!"
-    ... ''', width=None)
+    ... ''', width=None))
     ""
     "Say:\n"
     "  \"hello, world!\"\n"
 
-    >>> print normalize('''Say:
+    >>> print(normalize('''Say:
     ...   "Lorem ipsum dolor sit amet, consectetur adipisicing elit, "
-    ... ''', width=32)
+    ... ''', width=32))
     ""
     "Say:\n"
     "  \"Lorem ipsum dolor sit "
@@ -331,7 +352,7 @@ def normalize(string, prefix='', width=76):
     if lines and not lines[-1]:
         del lines[-1]
         lines[-1] += '\n'
-    return u'""\n' + u'\n'.join([(prefix + escape(l)) for l in lines])
+    return u'""\n' + u'\n'.join([(prefix + escape(line)) for line in lines])
 
 
 def write_po(fileobj, catalog, width=76, no_location=False, omit_header=False,
@@ -346,10 +367,10 @@ def write_po(fileobj, catalog, width=76, no_location=False, omit_header=False,
     <Message...>
     >>> catalog.add((u'bar', u'baz'), locations=[('main.py', 3)])
     <Message...>
-    >>> from io import BytesIO
+    >>> from babel._compat import BytesIO
     >>> buf = BytesIO()
     >>> write_po(buf, catalog, omit_header=True)
-    >>> print buf.getvalue()
+    >>> print(buf.getvalue().decode("utf8"))
     #: main.py:1
     #, fuzzy, python-format
     msgid "foo %(name)s"
@@ -424,14 +445,14 @@ def write_po(fileobj, catalog, width=76, no_location=False, omit_header=False,
                 prefix, _normalize(message.string or '', prefix)
             ))
 
-    messages = list(catalog)
+    sort_by = None
     if sort_output:
-        messages.sort()
+        sort_by = "message"
     elif sort_by_file:
-        messages.sort(lambda x,y: cmp(x.locations, y.locations))
+        sort_by = "location"
 
-    for message in messages:
-        if not message.id: # This is the header "message"
+    for message in _sort_messages(catalog, sort_by=sort_by):
+        if not message.id:  # This is the header "message"
             if omit_header:
                 continue
             comment_header = catalog.header_comment
@@ -449,9 +470,13 @@ def write_po(fileobj, catalog, width=76, no_location=False, omit_header=False,
             _write_comment(comment, prefix='.')
 
         if not no_location:
-            locs = u' '.join([u'%s:%d' % (filename.replace(os.sep, '/'), lineno)
-                              for filename, lineno in message.locations])
-            _write_comment(locs, prefix=':')
+            locs = []
+            for filename, lineno in sorted(message.locations):
+                if lineno:
+                    locs.append(u'%s:%d' % (filename.replace(os.sep, '/'), lineno))
+                else:
+                    locs.append(u'%s' % filename.replace(os.sep, '/'))
+            _write_comment(' '.join(locs), prefix=':')
         if message.flags:
             _write('#%s\n' % ', '.join([''] + sorted(message.flags)))
 
@@ -467,8 +492,29 @@ def write_po(fileobj, catalog, width=76, no_location=False, omit_header=False,
         _write('\n')
 
     if not ignore_obsolete:
-        for message in catalog.obsolete.values():
+        for message in _sort_messages(
+            catalog.obsolete.values(),
+            sort_by=sort_by
+        ):
             for comment in message.user_comments:
                 _write_comment(comment)
             _write_message(message, prefix='#~ ')
             _write('\n')
+
+
+def _sort_messages(messages, sort_by):
+    """
+    Sort the given message iterable by the given criteria.
+
+    Always returns a list.
+
+    :param messages: An iterable of Messages.
+    :param sort_by: Sort by which criteria? Options are `message` and `location`.
+    :return: list[Message]
+    """
+    messages = list(messages)
+    if sort_by == "message":
+        messages.sort()
+    elif sort_by == "location":
+        messages.sort(key=lambda m: m.locations)
+    return messages

@@ -13,7 +13,6 @@
 
 import calendar
 from datetime import date, datetime, time, timedelta
-import types
 import unittest
 
 from pytz import timezone
@@ -29,16 +28,21 @@ class DateTimeFormatTestCase(unittest.TestCase):
         fmt = dates.DateTimeFormat(d, locale='en_US')
         self.assertEqual('2', fmt['Q'])
         self.assertEqual('2nd quarter', fmt['QQQQ'])
+        self.assertEqual('2', fmt['q'])
+        self.assertEqual('2nd quarter', fmt['qqqq'])
         d = date(2006, 12, 31)
         fmt = dates.DateTimeFormat(d, locale='en_US')
+        self.assertEqual('Q4', fmt['qqq'])
+        self.assertEqual('4', fmt['qqqqq'])
         self.assertEqual('Q4', fmt['QQQ'])
+        self.assertEqual('4', fmt['QQQQQ'])
 
     def test_month_context(self):
         d = date(2006, 2, 8)
         fmt = dates.DateTimeFormat(d, locale='mt_MT')
-        self.assertEqual(u'F', fmt['MMMMM']) # narrow format
+        self.assertEqual(u'F', fmt['MMMMM'])  # narrow format
         fmt = dates.DateTimeFormat(d, locale='mt_MT')
-        self.assertEqual(u'Fr', fmt['LLLLL']) # narrow standalone
+        self.assertEqual(u'Fr', fmt['LLLLL'])  # narrow standalone
 
     def test_abbreviated_month_alias(self):
         d = date(2006, 3, 8)
@@ -122,43 +126,80 @@ class DateTimeFormatTestCase(unittest.TestCase):
         self.assertEqual('5', fmt['F'])
 
     def test_local_day_of_week(self):
-        d = date(2007, 4, 1) # a sunday
+        d = date(2007, 4, 1)  # a sunday
         fmt = dates.DateTimeFormat(d, locale='de_DE')
-        self.assertEqual('7', fmt['e']) # monday is first day of week
+        self.assertEqual('7', fmt['e'])  # monday is first day of week
         fmt = dates.DateTimeFormat(d, locale='en_US')
-        self.assertEqual('01', fmt['ee']) # sunday is first day of week
+        self.assertEqual('01', fmt['ee'])  # sunday is first day of week
         fmt = dates.DateTimeFormat(d, locale='bn_BD')
-        self.assertEqual('03', fmt['ee']) # friday is first day of week
+        self.assertEqual('03', fmt['ee'])  # friday is first day of week
 
-        d = date(2007, 4, 2) # a monday
+        d = date(2007, 4, 2)  # a monday
         fmt = dates.DateTimeFormat(d, locale='de_DE')
-        self.assertEqual('1', fmt['e']) # monday is first day of week
+        self.assertEqual('1', fmt['e'])  # monday is first day of week
         fmt = dates.DateTimeFormat(d, locale='en_US')
-        self.assertEqual('02', fmt['ee']) # sunday is first day of week
+        self.assertEqual('02', fmt['ee'])  # sunday is first day of week
         fmt = dates.DateTimeFormat(d, locale='bn_BD')
-        self.assertEqual('04', fmt['ee']) # friday is first day of week
+        self.assertEqual('04', fmt['ee'])  # friday is first day of week
 
     def test_local_day_of_week_standalone(self):
-        d = date(2007, 4, 1) # a sunday
+        d = date(2007, 4, 1)  # a sunday
         fmt = dates.DateTimeFormat(d, locale='de_DE')
-        self.assertEqual('7', fmt['c']) # monday is first day of week
+        self.assertEqual('7', fmt['c'])  # monday is first day of week
         fmt = dates.DateTimeFormat(d, locale='en_US')
-        self.assertEqual('1', fmt['c']) # sunday is first day of week
+        self.assertEqual('1', fmt['c'])  # sunday is first day of week
         fmt = dates.DateTimeFormat(d, locale='bn_BD')
-        self.assertEqual('3', fmt['c']) # friday is first day of week
+        self.assertEqual('3', fmt['c'])  # friday is first day of week
 
-        d = date(2007, 4, 2) # a monday
+        d = date(2007, 4, 2)  # a monday
         fmt = dates.DateTimeFormat(d, locale='de_DE')
-        self.assertEqual('1', fmt['c']) # monday is first day of week
+        self.assertEqual('1', fmt['c'])  # monday is first day of week
         fmt = dates.DateTimeFormat(d, locale='en_US')
-        self.assertEqual('2', fmt['c']) # sunday is first day of week
+        self.assertEqual('2', fmt['c'])  # sunday is first day of week
         fmt = dates.DateTimeFormat(d, locale='bn_BD')
-        self.assertEqual('4', fmt['c']) # friday is first day of week
+        self.assertEqual('4', fmt['c'])  # friday is first day of week
+
+    def test_pattern_day_of_week(self):
+        dt = datetime(2016, 2, 6)
+        fmt = dates.DateTimeFormat(dt, locale='en_US')
+        self.assertEqual('7', fmt['c'])
+        self.assertEqual('Sat', fmt['ccc'])
+        self.assertEqual('Saturday', fmt['cccc'])
+        self.assertEqual('S', fmt['ccccc'])
+        self.assertEqual('Sa', fmt['cccccc'])
+        self.assertEqual('7', fmt['e'])
+        self.assertEqual('07', fmt['ee'])
+        self.assertEqual('Sat', fmt['eee'])
+        self.assertEqual('Saturday', fmt['eeee'])
+        self.assertEqual('S', fmt['eeeee'])
+        self.assertEqual('Sa', fmt['eeeeee'])
+        self.assertEqual('Sat', fmt['E'])
+        self.assertEqual('Sat', fmt['EE'])
+        self.assertEqual('Sat', fmt['EEE'])
+        self.assertEqual('Saturday', fmt['EEEE'])
+        self.assertEqual('S', fmt['EEEEE'])
+        self.assertEqual('Sa', fmt['EEEEEE'])
+        fmt = dates.DateTimeFormat(dt, locale='uk')
+        self.assertEqual('6', fmt['c'])
+        self.assertEqual('6', fmt['e'])
+        self.assertEqual('06', fmt['ee'])
 
     def test_fractional_seconds(self):
-        t = time(15, 30, 12, 34567)
+        t = time(8, 3, 9, 799)
         fmt = dates.DateTimeFormat(t, locale='en_US')
-        self.assertEqual('3457', fmt['SSSS'])
+        self.assertEqual('0', fmt['S'])
+        t = time(8, 3, 1, 799)
+        fmt = dates.DateTimeFormat(t, locale='en_US')
+        self.assertEqual('0008', fmt['SSSS'])
+        t = time(8, 3, 1, 34567)
+        fmt = dates.DateTimeFormat(t, locale='en_US')
+        self.assertEqual('0346', fmt['SSSS'])
+        t = time(8, 3, 1, 345678)
+        fmt = dates.DateTimeFormat(t, locale='en_US')
+        self.assertEqual('345678', fmt['SSSSSS'])
+        t = time(8, 3, 1, 799)
+        fmt = dates.DateTimeFormat(t, locale='en_US')
+        self.assertEqual('00080', fmt['SSSSS'])
 
     def test_fractional_seconds_zero(self):
         t = time(15, 30, 0)
@@ -250,6 +291,129 @@ class FormatDatetimeTestCase(unittest.TestCase):
         formatted_string = dates.format_datetime(epoch, format='long', locale='en_US')
         self.assertEqual(u'April 1, 2012 at 3:30:29 PM +0000', formatted_string)
 
+    def test_timezone_formats(self):
+        dt = datetime(2016, 1, 13, 7, 8, 35)
+        tz = dates.get_timezone('America/Los_Angeles')
+        dt = tz.localize(dt)
+        formatted_string = dates.format_datetime(dt, 'z', locale='en')
+        self.assertEqual(u'PST', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'zz', locale='en')
+        self.assertEqual(u'PST', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'zzz', locale='en')
+        self.assertEqual(u'PST', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'zzzz', locale='en')
+        self.assertEqual(u'Pacific Standard Time', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'Z', locale='en')
+        self.assertEqual(u'-0800', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'ZZ', locale='en')
+        self.assertEqual(u'-0800', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'ZZZ', locale='en')
+        self.assertEqual(u'-0800', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'ZZZZ', locale='en')
+        self.assertEqual(u'GMT-08:00', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'ZZZZZ', locale='en')
+        self.assertEqual(u'-08:00', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'OOOO', locale='en')
+        self.assertEqual(u'GMT-08:00', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'VV', locale='en')
+        self.assertEqual(u'America/Los_Angeles', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'VVV', locale='en')
+        self.assertEqual(u'Los Angeles', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'X', locale='en')
+        self.assertEqual(u'-08', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'XX', locale='en')
+        self.assertEqual(u'-0800', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'XXX', locale='en')
+        self.assertEqual(u'-08:00', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'XXXX', locale='en')
+        self.assertEqual(u'-0800', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'XXXXX', locale='en')
+        self.assertEqual(u'-08:00', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'x', locale='en')
+        self.assertEqual(u'-08', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'xx', locale='en')
+        self.assertEqual(u'-0800', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'xxx', locale='en')
+        self.assertEqual(u'-08:00', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'xxxx', locale='en')
+        self.assertEqual(u'-0800', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'xxxxx', locale='en')
+        self.assertEqual(u'-08:00', formatted_string)
+        dt = datetime(2016, 1, 13, 7, 8, 35)
+        tz = dates.get_timezone('UTC')
+        dt = tz.localize(dt)
+        formatted_string = dates.format_datetime(dt, 'Z', locale='en')
+        self.assertEqual(u'+0000', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'ZZ', locale='en')
+        self.assertEqual(u'+0000', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'ZZZ', locale='en')
+        self.assertEqual(u'+0000', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'ZZZZ', locale='en')
+        self.assertEqual(u'GMT+00:00', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'ZZZZZ', locale='en')
+        self.assertEqual(u'Z', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'OOOO', locale='en')
+        self.assertEqual(u'GMT+00:00', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'VV', locale='en')
+        self.assertEqual(u'Etc/GMT', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'VVV', locale='en')
+        self.assertEqual(u'GMT', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'X', locale='en')
+        self.assertEqual(u'Z', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'XX', locale='en')
+        self.assertEqual(u'Z', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'XXX', locale='en')
+        self.assertEqual(u'Z', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'XXXX', locale='en')
+        self.assertEqual(u'Z', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'XXXXX', locale='en')
+        self.assertEqual(u'Z', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'x', locale='en')
+        self.assertEqual(u'+00', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'xx', locale='en')
+        self.assertEqual(u'+0000', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'xxx', locale='en')
+        self.assertEqual(u'+00:00', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'xxxx', locale='en')
+        self.assertEqual(u'+0000', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'xxxxx', locale='en')
+        self.assertEqual(u'+00:00', formatted_string)
+        dt = datetime(2016, 1, 13, 7, 8, 35)
+        tz = dates.get_timezone('Asia/Kolkata')
+        dt = tz.localize(dt)
+        formatted_string = dates.format_datetime(dt, 'zzzz', locale='en')
+        self.assertEqual(u'India Standard Time', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'ZZZZ', locale='en')
+        self.assertEqual(u'GMT+05:30', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'ZZZZZ', locale='en')
+        self.assertEqual(u'+05:30', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'OOOO', locale='en')
+        self.assertEqual(u'GMT+05:30', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'VV', locale='en')
+        self.assertEqual(u'Asia/Calcutta', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'VVV', locale='en')
+        self.assertEqual(u'Kolkata', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'X', locale='en')
+        self.assertEqual(u'+0530', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'XX', locale='en')
+        self.assertEqual(u'+0530', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'XXX', locale='en')
+        self.assertEqual(u'+05:30', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'XXXX', locale='en')
+        self.assertEqual(u'+0530', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'XXXXX', locale='en')
+        self.assertEqual(u'+05:30', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'x', locale='en')
+        self.assertEqual(u'+0530', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'xx', locale='en')
+        self.assertEqual(u'+0530', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'xxx', locale='en')
+        self.assertEqual(u'+05:30', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'xxxx', locale='en')
+        self.assertEqual(u'+0530', formatted_string)
+        formatted_string = dates.format_datetime(dt, 'xxxxx', locale='en')
+        self.assertEqual(u'+05:30', formatted_string)
+
 
 class FormatTimeTestCase(unittest.TestCase):
 
@@ -282,14 +446,14 @@ class FormatTimedeltaTestCase(unittest.TestCase):
         self.assertEqual('0 seconds', string)
         string = dates.format_timedelta(timedelta(seconds=0), locale='en',
                                         format='short')
-        self.assertEqual('0 secs', string)
+        self.assertEqual('0 sec', string)
         string = dates.format_timedelta(timedelta(seconds=0),
                                         granularity='hour', locale='en')
         self.assertEqual('0 hours', string)
         string = dates.format_timedelta(timedelta(seconds=0),
                                         granularity='hour', locale='en',
                                         format='short')
-        self.assertEqual('0 hrs', string)
+        self.assertEqual('0 hr', string)
 
     def test_small_value_with_granularity(self):
         string = dates.format_timedelta(timedelta(seconds=42),
@@ -328,8 +492,10 @@ class FormatTimedeltaTestCase(unittest.TestCase):
 
 
 class TimeZoneAdjustTestCase(unittest.TestCase):
+
     def _utc(self):
         class EvilFixedOffsetTimezone(FixedOffsetTimezone):
+
             def localize(self, dt, is_dst=False):
                 raise NotImplementedError()
         UTC = EvilFixedOffsetTimezone(0, 'UTC')
@@ -351,6 +517,7 @@ def test_get_period_names():
 
 def test_get_day_names():
     assert dates.get_day_names('wide', locale='en_US')[1] == u'Tuesday'
+    assert dates.get_day_names('short', locale='en_US')[1] == u'Tu'
     assert dates.get_day_names('abbreviated', locale='es')[1] == u'mar.'
     de = dates.get_day_names('narrow', context='stand-alone', locale='de_DE')
     assert de[1] == u'D'
@@ -366,6 +533,7 @@ def test_get_month_names():
 def test_get_quarter_names():
     assert dates.get_quarter_names('wide', locale='en_US')[1] == u'1st quarter'
     assert dates.get_quarter_names('abbreviated', locale='de_DE')[1] == u'Q1'
+    assert dates.get_quarter_names('narrow', locale='de_DE')[1] == u'1'
 
 
 def test_get_era_names():
@@ -393,12 +561,13 @@ def test_get_time_format():
 def test_get_timezone_gmt():
     dt = datetime(2007, 4, 1, 15, 30)
     assert dates.get_timezone_gmt(dt, locale='en') == u'GMT+00:00'
-
+    assert dates.get_timezone_gmt(dt, locale='en', return_z=True) == 'Z'
+    assert dates.get_timezone_gmt(dt, locale='en', width='iso8601_short') == u'+00'
     tz = timezone('America/Los_Angeles')
     dt = tz.localize(datetime(2007, 4, 1, 15, 30))
     assert dates.get_timezone_gmt(dt, locale='en') == u'GMT-07:00'
     assert dates.get_timezone_gmt(dt, 'short', locale='en') == u'-0700'
-
+    assert dates.get_timezone_gmt(dt, locale='en', width='iso8601_short') == u'-07'
     assert dates.get_timezone_gmt(dt, 'long', locale='fr_FR') == u'UTC-07:00'
 
 
@@ -406,19 +575,26 @@ def test_get_timezone_location():
     tz = timezone('America/St_Johns')
     assert (dates.get_timezone_location(tz, locale='de_DE') ==
             u"Kanada (St. John\u2019s) Zeit")
+    assert (dates.get_timezone_location(tz, locale='en') ==
+            u'Canada (St. John’s) Time')
+    assert (dates.get_timezone_location(tz, locale='en', return_city=True) ==
+            u'St. John’s')
+
     tz = timezone('America/Mexico_City')
     assert (dates.get_timezone_location(tz, locale='de_DE') ==
             u'Mexiko (Mexiko-Stadt) Zeit')
 
     tz = timezone('Europe/Berlin')
-    assert (dates.get_timezone_name(tz, locale='de_DE') ==
-            u'Mitteleurop\xe4ische Zeit')
+    assert (dates.get_timezone_location(tz, locale='de_DE') ==
+            u'Deutschland (Berlin) Zeit')
 
 
 def test_get_timezone_name():
     dt = time(15, 30, tzinfo=timezone('America/Los_Angeles'))
     assert (dates.get_timezone_name(dt, locale='en_US') ==
             u'Pacific Standard Time')
+    assert (dates.get_timezone_name(dt, locale='en_US', return_zone=True) ==
+            u'America/Los_Angeles')
     assert dates.get_timezone_name(dt, width='short', locale='en_US') == u'PST'
 
     tz = timezone('America/Los_Angeles')
@@ -448,6 +624,15 @@ def test_get_timezone_name():
     assert dates.get_timezone_name(tz, locale='en', width='long',
                                    zone_variant='daylight') == u'Pacific Daylight Time'
 
+    localnow = datetime.utcnow().replace(tzinfo=timezone('UTC')).astimezone(dates.LOCALTZ)
+    assert (dates.get_timezone_name(None, locale='en_US') ==
+            dates.get_timezone_name(localnow, locale='en_US'))
+
+    assert (dates.get_timezone_name('Europe/Berlin', locale='en_US') == "Central European Time")
+
+    assert (dates.get_timezone_name(1400000000, locale='en_US', width='short') == "Unknown Region (GMT) Time")
+    assert (dates.get_timezone_name(time(16, 20), locale='en_US', width='short') == "+0000")
+
 
 def test_format_date():
     d = date(2007, 4, 1)
@@ -471,7 +656,7 @@ def test_format_datetime():
 
     full = dates.format_datetime(dt, 'full', tzinfo=timezone('Europe/Paris'),
                                  locale='fr_FR')
-    assert full == (u'dimanche 1 avril 2007 17:30:00 heure '
+    assert full == (u'dimanche 1 avril 2007 à 17:30:00 heure '
                     u'd\u2019\xe9t\xe9 d\u2019Europe centrale')
     custom = dates.format_datetime(dt, "yyyy.MM.dd G 'at' HH:mm:ss zzz",
                                    tzinfo=timezone('US/Eastern'), locale='en')
@@ -507,10 +692,10 @@ def test_format_time():
 def test_format_skeleton():
     dt = datetime(2007, 4, 1, 15, 30)
     assert (dates.format_skeleton('yMEd', dt, locale='en_US') == u'Sun, 4/1/2007')
-    assert (dates.format_skeleton('yMEd', dt, locale='th') == u'\u0e2d\u0e32. 1/4/2007')
+    assert (dates.format_skeleton('yMEd', dt, locale='th') == u'อา. 1/4/2007')
 
     assert (dates.format_skeleton('EHm', dt, locale='en') == u'Sun 15:30')
-    assert (dates.format_skeleton('EHm', dt, tzinfo=timezone('Asia/Bangkok'), locale='th') == u'\u0e2d\u0e32. 22:30')
+    assert (dates.format_skeleton('EHm', dt, tzinfo=timezone('Asia/Bangkok'), locale='th') == u'อา. 22:30 น.')
 
 
 def test_format_timedelta():
@@ -555,3 +740,30 @@ def test_parse_pattern():
     assert (dates.parse_pattern("H:mm' Uhr 'z").format ==
             u'%(H)s:%(mm)s Uhr %(z)s')
     assert dates.parse_pattern("hh' o''clock'").format == u"%(hh)s o'clock"
+
+
+def test_lithuanian_long_format():
+    assert (
+        dates.format_date(date(2015, 12, 10), locale='lt_LT', format='long') ==
+        u'2015 m. gruodžio 10 d.'
+    )
+
+
+def test_zh_TW_format():
+    # Refs GitHub issue #378
+    assert dates.format_time(datetime(2016, 4, 8, 12, 34, 56), locale='zh_TW') == u'\u4e0b\u534812:34:56'
+
+
+def test_format_current_moment(monkeypatch):
+    import datetime as datetime_module
+    frozen_instant = datetime.utcnow()
+
+    class frozen_datetime(datetime):
+
+        @classmethod
+        def utcnow(cls):
+            return frozen_instant
+
+    # Freeze time! Well, some of it anyway.
+    monkeypatch.setattr(datetime_module, "datetime", frozen_datetime)
+    assert dates.format_datetime(locale="en_US") == dates.format_datetime(frozen_instant, locale="en_US")

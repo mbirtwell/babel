@@ -39,6 +39,9 @@ For a PR to be merged, the following statements must hold true:
   not the author of the PR. Commits shall comply to the "Good Commits" standards
   outlined below.
 
+To begin contributing have a look at the open [easy issues](https://github.com/python-babel/babel/issues?q=is%3Aopen+is%3Aissue+label%3Adifficulty%2Flow)
+which could be fixed.
+
 ## Correcting PRs
 
 Rebasing PRs is preferred over merging master into the source branches again
@@ -48,5 +51,5 @@ shall be amended so the history is not cluttered by "fixup commits".
 ## Writing Good Commits
 
 Please see
-http://coala.readthedocs.org/en/latest/Getting_Involved/Writing_Good_Commits/
+https://coala.readthedocs.io/en/latest/Getting_Involved/Writing_Good_Commits.html
 for guidelines on how to write good commits and proper commit messages.

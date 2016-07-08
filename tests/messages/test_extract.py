@@ -38,17 +38,32 @@ msg10 = dngettext(getDomain(), 'Page', 'Pages', 3)
                                                extract.DEFAULT_KEYWORDS.keys(),
                                                [], {}))
         self.assertEqual([
-                (1, '_', None, []),
-                (2, 'ungettext', (None, None, None), []),
-                (3, 'ungettext', (u'Babel', None, None), []),
-                (4, 'ungettext', (None, u'Babels', None), []),
-                (5, 'ungettext', (u'bunny', u'bunnies', None), []),
-                (6, 'ungettext', (None, u'bunnies', None), []),
-                (7, '_', None, []),
-                (8, 'gettext', u'Rabbit', []),
-                (9, 'dgettext', (u'wiki', None), []),
-                (10, 'dngettext', (None, u'Page', u'Pages', None), [])],
-                         messages)
+            (1, '_', None, []),
+            (2, 'ungettext', (None, None, None), []),
+            (3, 'ungettext', (u'Babel', None, None), []),
+            (4, 'ungettext', (None, u'Babels', None), []),
+            (5, 'ungettext', (u'bunny', u'bunnies', None), []),
+            (6, 'ungettext', (None, u'bunnies', None), []),
+            (7, '_', None, []),
+            (8, 'gettext', u'Rabbit', []),
+            (9, 'dgettext', (u'wiki', None), []),
+            (10, 'dngettext', (None, u'Page', u'Pages', None), [])],
+            messages)
+
+    def test_extract_default_encoding_ascii(self):
+        buf = BytesIO(b'_("a")')
+        messages = list(extract.extract_python(
+            buf, list(extract.DEFAULT_KEYWORDS), [], {},
+        ))
+        # Should work great in both py2 and py3
+        self.assertEqual([(1, '_', 'a', [])], messages)
+
+    def test_extract_default_encoding_utf8(self):
+        buf = BytesIO(u'_("☃")'.encode('UTF-8'))
+        messages = list(extract.extract_python(
+            buf, list(extract.DEFAULT_KEYWORDS), [], {},
+        ))
+        self.assertEqual([(1, '_', u'☃', [])], messages)
 
     def test_nested_comments(self):
         buf = BytesIO(b"""\
@@ -79,9 +94,9 @@ add_notice(req, ngettext("Foo deleted.", "Foos deleted.", len(selected)))
 add_notice(req, ngettext("Bar deleted.",
                          "Bars deleted.", len(selected)))
 """)
-        messages = list(extract.extract_python(buf, ('ngettext','_'), ['NOTE:'],
+        messages = list(extract.extract_python(buf, ('ngettext', '_'), ['NOTE:'],
 
-                                               {'strip_comment_tags':False}))
+                                               {'strip_comment_tags': False}))
         self.assertEqual((6, '_', 'Locale deleted.',
                           [u'NOTE: This Comment SHOULD Be Extracted']),
                          messages[1])
@@ -90,9 +105,9 @@ add_notice(req, ngettext("Bar deleted.",
                           [u'NOTE: This Comment SHOULD Be Extracted']),
                          messages[2])
         self.assertEqual((3, 'ngettext',
-                           (u'Catalog deleted.',
-                            u'Catalogs deleted.', None),
-                           [u'NOTE: This Comment SHOULD Be Extracted']),
+                          (u'Catalog deleted.',
+                           u'Catalogs deleted.', None),
+                          [u'NOTE: This Comment SHOULD Be Extracted']),
                          messages[0])
         self.assertEqual((15, 'ngettext', (u'Bar deleted.', u'Bars deleted.',
                                            None),
@@ -130,6 +145,28 @@ msg2 = ngettext('elvis',
         messages = list(extract.extract_python(buf, ('ngettext',), [], {}))
         self.assertEqual([(1, 'ngettext', (u'pylon', u'pylons', None), []),
                           (3, 'ngettext', (u'elvis', u'elvises', None), [])],
+                         messages)
+
+    def test_npgettext(self):
+        buf = BytesIO(b"""\
+msg1 = npgettext('Strings','pylon',
+                'pylons', count)
+msg2 = npgettext('Strings','elvis',
+                'elvises',
+                 count)
+""")
+        messages = list(extract.extract_python(buf, ('npgettext',), [], {}))
+        self.assertEqual([(1, 'npgettext', (u'Strings', u'pylon', u'pylons', None), []),
+                          (3, 'npgettext', (u'Strings', u'elvis', u'elvises', None), [])],
+                         messages)
+        buf = BytesIO(b"""\
+msg = npgettext('Strings', 'pylon',  # TRANSLATORS: shouldn't be
+                'pylons', # TRANSLATORS: seeing this
+                count)
+""")
+        messages = list(extract.extract_python(buf, ('npgettext',),
+                                               ['TRANSLATORS:'], {}))
+        self.assertEqual([(1, 'npgettext', (u'Strings', u'pylon', u'pylons', None), [])],
                          messages)
 
     def test_triple_quoted_strings(self):
@@ -388,97 +425,6 @@ _('Babatschi')""")
                           u'a prefix too'], messages[1][2])
 
 
-class ExtractJavaScriptTestCase(unittest.TestCase):
-
-    def test_simple_extract(self):
-        buf = BytesIO(b"""\
-msg1 = _('simple')
-msg2 = gettext('simple')
-msg3 = ngettext('s', 'p', 42)
-        """)
-        messages = \
-            list(extract.extract('javascript', buf, extract.DEFAULT_KEYWORDS,
-                                 [], {}))
-
-        self.assertEqual([(1, 'simple', [], None),
-                          (2, 'simple', [], None),
-                          (3, ('s', 'p'), [], None)], messages)
-
-    def test_various_calls(self):
-        buf = BytesIO(b"""\
-msg1 = _(i18n_arg.replace(/"/, '"'))
-msg2 = ungettext(i18n_arg.replace(/"/, '"'), multi_arg.replace(/"/, '"'), 2)
-msg3 = ungettext("Babel", multi_arg.replace(/"/, '"'), 2)
-msg4 = ungettext(i18n_arg.replace(/"/, '"'), "Babels", 2)
-msg5 = ungettext('bunny', 'bunnies', parseInt(Math.random() * 2 + 1))
-msg6 = ungettext(arg0, 'bunnies', rparseInt(Math.random() * 2 + 1))
-msg7 = _(hello.there)
-msg8 = gettext('Rabbit')
-msg9 = dgettext('wiki', model.addPage())
-msg10 = dngettext(domain, 'Page', 'Pages', 3)
-""")
-        messages = \
-            list(extract.extract('javascript', buf, extract.DEFAULT_KEYWORDS, [],
-                                 {}))
-        self.assertEqual([(5, (u'bunny', u'bunnies'), [], None),
-                          (8, u'Rabbit', [], None),
-                          (10, (u'Page', u'Pages'), [], None)], messages)
-
-    def test_message_with_line_comment(self):
-        buf = BytesIO(u"""\
-// NOTE: hello
-msg = _('Bonjour à tous')
-""".encode('utf-8'))
-        messages = list(extract.extract_javascript(buf, ('_',), ['NOTE:'], {}))
-        self.assertEqual(u'Bonjour à tous', messages[0][2])
-        self.assertEqual([u'NOTE: hello'], messages[0][3])
-
-    def test_message_with_multiline_comment(self):
-        buf = BytesIO(u"""\
-/* NOTE: hello
-   and bonjour
-     and servus */
-msg = _('Bonjour à tous')
-""".encode('utf-8'))
-        messages = list(extract.extract_javascript(buf, ('_',), ['NOTE:'], {}))
-        self.assertEqual(u'Bonjour à tous', messages[0][2])
-        self.assertEqual([u'NOTE: hello', 'and bonjour', '  and servus'], messages[0][3])
-
-    def test_ignore_function_definitions(self):
-        buf = BytesIO(b"""\
-function gettext(value) {
-    return translations[language][value] || value;
-}""")
-
-        messages = list(extract.extract_javascript(buf, ('gettext',), [], {}))
-        self.assertEqual(messages, [])
-
-    def test_misplaced_comments(self):
-        buf = BytesIO(b"""\
-/* NOTE: this won't show up */
-foo()
-
-/* NOTE: this will */
-msg = _('Something')
-
-// NOTE: this will show up
-// too.
-msg = _('Something else')
-
-// NOTE: but this won't
-bar()
-
-_('no comment here')
-""")
-        messages = list(extract.extract_javascript(buf, ('_',), ['NOTE:'], {}))
-        self.assertEqual(u'Something', messages[0][2])
-        self.assertEqual([u'NOTE: this will'], messages[0][3])
-        self.assertEqual(u'Something else', messages[1][2])
-        self.assertEqual([u'NOTE: this will show up', 'too.'], messages[1][3])
-        self.assertEqual(u'no comment here', messages[2][2])
-        self.assertEqual([], messages[2][3])
-
-
 class ExtractTestCase(unittest.TestCase):
 
     def test_invalid_filter(self):
@@ -546,3 +492,9 @@ msg = _('')
             assert 'warning: Empty msgid.' in sys.stderr.getvalue()
         finally:
             sys.stderr = stderr
+
+    def test_extract_allows_callable(self):
+        def arbitrary_extractor(fileobj, keywords, comment_tags, options):
+            return [(1, None, (), ())]
+        for x in extract.extract(arbitrary_extractor, BytesIO(b"")):
+            assert x[0] == 1

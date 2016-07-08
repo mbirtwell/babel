@@ -11,11 +11,9 @@
 # individuals. For the exact contribution history, see the revision
 # history and logs, available at http://babel.edgewall.org/log/.
 
-import doctest
-import unittest
 import pytest
 
-from babel import core, Locale
+from babel import core
 from babel.core import default_locale, Locale
 
 
@@ -24,18 +22,27 @@ def test_locale_provides_access_to_cldr_locale_data():
     assert u'English (United States)' == locale.display_name
     assert u'.' == locale.number_symbols['decimal']
 
+
 def test_locale_repr():
+    assert repr(Locale('en', 'US')) == "Locale('en', territory='US')"
     assert ("Locale('de', territory='DE')" == repr(Locale('de', 'DE')))
     assert ("Locale('zh', territory='CN', script='Hans')" ==
             repr(Locale('zh', 'CN', script='Hans')))
 
+
 def test_locale_comparison():
     en_US = Locale('en', 'US')
-    assert en_US == en_US
-    assert None != en_US
-
+    en_US_2 = Locale('en', 'US')
+    fi_FI = Locale('fi', 'FI')
     bad_en_US = Locale('en_US')
+    assert en_US == en_US
+    assert en_US == en_US_2
+    assert en_US != fi_FI
+    assert not (en_US != en_US_2)
+    assert en_US is not None
     assert en_US != bad_en_US
+    assert fi_FI != bad_en_US
+
 
 def test_can_return_default_locale(os_environ):
     os_environ['LC_MESSAGES'] = 'fr_FR.UTF-8'
@@ -55,10 +62,15 @@ def test_get_global():
     assert core.get_global('zone_territories')['Europe/Berlin'] == 'DE'
 
 
-class TestLocaleClass:
+def test_hash():
+    locale_a = Locale('en', 'US')
+    locale_b = Locale('en', 'US')
+    locale_c = Locale('fi', 'FI')
+    assert hash(locale_a) == hash(locale_b)
+    assert hash(locale_a) != hash(locale_c)
 
-    def test_repr(self):
-        assert repr(Locale('en', 'US')) == "Locale('en', territory='US')"
+
+class TestLocaleClass:
 
     def test_attributes(self):
         locale = Locale('en', 'US')
@@ -160,7 +172,7 @@ class TestLocaleClass:
         assert (Locale('en', 'US').currency_formats['standard'].pattern ==
                 u'\xa4#,##0.00')
         assert (Locale('en', 'US').currency_formats['accounting'].pattern ==
-                u'\xa4#,##0.00')
+                u'\xa4#,##0.00;(\xa4#,##0.00)')
 
     def test_percent_formats_property(self):
         assert Locale('en', 'US').percent_formats[None].pattern == '#,##0%'
@@ -261,6 +273,7 @@ def test_negotiate_locale():
             'ja_JP')
     assert core.negotiate_locale(['no', 'sv'], ['nb_NO', 'sv_SE']) == 'nb_NO'
 
+
 def test_parse_locale():
     assert core.parse_locale('zh_CN') == ('zh', 'CN', None, None)
     assert core.parse_locale('zh_Hans_CN') == ('zh', 'CN', 'Hans', None)
@@ -276,12 +289,24 @@ def test_parse_locale():
     assert (core.parse_locale('de_DE.iso885915@euro') ==
             ('de', 'DE', None, None))
 
-def test_compatible_classes_in_global_and_localedata():
+
+@pytest.mark.parametrize('filename', [
+    'babel/global.dat',
+    'babel/locale-data/root.dat',
+    'babel/locale-data/en.dat',
+    'babel/locale-data/en_US.dat',
+    'babel/locale-data/en_US_POSIX.dat',
+    'babel/locale-data/zh_Hans_CN.dat',
+    'babel/locale-data/zh_Hant_TW.dat',
+    'babel/locale-data/es_419.dat',
+])
+def test_compatible_classes_in_global_and_localedata(filename):
     # Use pickle module rather than cPickle since cPickle.Unpickler is a method
     # on Python 2
     import pickle
 
     class Unpickler(pickle.Unpickler):
+
         def find_class(self, module, name):
             # *.dat files must have compatible classes between Python 2 and 3
             if module.split('.')[0] == 'babel':
@@ -289,15 +314,5 @@ def test_compatible_classes_in_global_and_localedata():
             raise pickle.UnpicklingError("global '%s.%s' is forbidden" %
                                          (module, name))
 
-    def load(filename):
-        with open(filename, 'rb') as f:
-            return Unpickler(f).load()
-
-    load('babel/global.dat')
-    load('babel/locale-data/root.dat')
-    load('babel/locale-data/en.dat')
-    load('babel/locale-data/en_US.dat')
-    load('babel/locale-data/en_US_POSIX.dat')
-    load('babel/locale-data/zh_Hans_CN.dat')
-    load('babel/locale-data/zh_Hant_TW.dat')
-    load('babel/locale-data/es_419.dat')
+    with open(filename, 'rb') as f:
+        return Unpickler(f).load()

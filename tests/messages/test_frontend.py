@@ -10,7 +10,7 @@
 # This software consists of voluntary contributions made by many
 # individuals. For the exact contribution history, see the revision
 # history and logs, available at http://babel.edgewall.org/log/.
-
+import shlex
 from datetime import datetime
 from distutils.dist import Distribution
 from distutils.errors import DistutilsOptionError
@@ -22,15 +22,19 @@ import sys
 import time
 import unittest
 
+import pytest
+
 from babel import __version__ as VERSION
 from babel.dates import format_datetime
-from babel.messages import frontend
+from babel.messages import frontend, Catalog
+from babel.messages.frontend import CommandLineInterface, extract_messages, update_catalog
 from babel.util import LOCALTZ
-from babel.messages.pofile import read_po
+from babel.messages.pofile import read_po, write_po
 from babel._compat import StringIO
 
 
 this_dir = os.path.abspath(os.path.dirname(__file__))
+
 
 class CompileCatalogTestCase(unittest.TestCase):
 
@@ -38,7 +42,7 @@ class CompileCatalogTestCase(unittest.TestCase):
         self.olddir = os.getcwd()
         self.datadir = os.path.join(this_dir, 'data')
         os.chdir(self.datadir)
-        _global_log.threshold = 5 # shut up distutils logging
+        _global_log.threshold = 5  # shut up distutils logging
 
         self.dist = Distribution(dict(
             name='TestProject',
@@ -68,7 +72,7 @@ class ExtractMessagesTestCase(unittest.TestCase):
         self.olddir = os.getcwd()
         self.datadir = os.path.join(this_dir, 'data')
         os.chdir(self.datadir)
-        _global_log.threshold = 5 # shut up distutils logging
+        _global_log.threshold = 5  # shut up distutils logging
 
         self.dist = Distribution(dict(
             name='TestProject',
@@ -108,8 +112,13 @@ class ExtractMessagesTestCase(unittest.TestCase):
         self.cmd.sort_by_file = True
         self.assertRaises(DistutilsOptionError, self.cmd.finalize_options)
 
-    def test_input_dirs_is_treated_as_list(self):
-        self.cmd.input_dirs = self.datadir
+    def test_invalid_file_or_dir_input_path(self):
+        self.cmd.input_paths = 'nonexistent_path'
+        self.cmd.output_file = 'dummy'
+        self.assertRaises(DistutilsOptionError, self.cmd.finalize_options)
+
+    def test_input_paths_is_treated_as_list(self):
+        self.cmd.input_paths = self.datadir
         self.cmd.output_file = self._pot_file()
         self.cmd.finalize_options()
         self.cmd.run()
@@ -120,12 +129,25 @@ class ExtractMessagesTestCase(unittest.TestCase):
         self.assertEqual(1, len(msg.locations))
         self.assertTrue('file1.py' in msg.locations[0][0])
 
-    def test_input_dirs_handle_spaces_after_comma(self):
-        self.cmd.input_dirs = 'foo,  bar'
+    def test_input_paths_handle_spaces_after_comma(self):
+        self.cmd.input_paths = '%s,  %s' % (this_dir, self.datadir)
         self.cmd.output_file = self._pot_file()
         self.cmd.finalize_options()
 
-        self.assertEqual(['foo', 'bar'], self.cmd.input_dirs)
+        self.assertEqual([this_dir, self.datadir], self.cmd.input_paths)
+
+    def test_input_dirs_is_alias_for_input_paths(self):
+        self.cmd.input_dirs = this_dir
+        self.cmd.output_file = self._pot_file()
+        self.cmd.finalize_options()
+        # Gets listified in `finalize_options`:
+        assert self.cmd.input_paths == [self.cmd.input_dirs]
+
+    def test_input_dirs_is_mutually_exclusive_with_input_paths(self):
+        self.cmd.input_dirs = this_dir
+        self.cmd.input_paths = this_dir
+        self.cmd.output_file = self._pot_file()
+        self.assertRaises(DistutilsOptionError, self.cmd.finalize_options)
 
     def test_extraction_with_default_mapping(self):
         self.cmd.copyright_holder = 'FooBar, Inc.'
@@ -177,9 +199,9 @@ msgstr[0] ""
 msgstr[1] ""
 
 """ % {'version': VERSION,
-       'year': time.strftime('%Y'),
-       'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
-                               tzinfo=LOCALTZ, locale='en')}
+            'year': time.strftime('%Y'),
+            'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
+                                    tzinfo=LOCALTZ, locale='en')}
         with open(self._pot_file(), 'U') as f:
             actual_content = f.read()
         self.assertEqual(expected_content, actual_content)
@@ -229,9 +251,9 @@ msgstr[0] ""
 msgstr[1] ""
 
 """ % {'version': VERSION,
-       'year': time.strftime('%Y'),
-       'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
-                               tzinfo=LOCALTZ, locale='en')}
+            'year': time.strftime('%Y'),
+            'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
+                                    tzinfo=LOCALTZ, locale='en')}
         with open(self._pot_file(), 'U') as f:
             actual_content = f.read()
         self.assertEqual(expected_content, actual_content)
@@ -239,8 +261,8 @@ msgstr[1] ""
     def test_extraction_with_mapping_dict(self):
         self.dist.message_extractors = {
             'project': [
-                ('**/ignored/**.*', 'ignore',   None),
-                ('**.py',           'python',   None),
+                ('**/ignored/**.*', 'ignore', None),
+                ('**.py', 'python', None),
             ]
         }
         self.cmd.copyright_holder = 'FooBar, Inc.'
@@ -286,9 +308,9 @@ msgstr[0] ""
 msgstr[1] ""
 
 """ % {'version': VERSION,
-       'year': time.strftime('%Y'),
-       'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
-                               tzinfo=LOCALTZ, locale='en')}
+            'year': time.strftime('%Y'),
+            'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
+                                    tzinfo=LOCALTZ, locale='en')}
         with open(self._pot_file(), 'U') as f:
             actual_content = f.read()
         self.assertEqual(expected_content, actual_content)
@@ -300,7 +322,7 @@ class InitCatalogTestCase(unittest.TestCase):
         self.olddir = os.getcwd()
         self.datadir = os.path.join(this_dir, 'data')
         os.chdir(self.datadir)
-        _global_log.threshold = 5 # shut up distutils logging
+        _global_log.threshold = 5  # shut up distutils logging
 
         self.dist = Distribution(dict(
             name='TestProject',
@@ -318,7 +340,7 @@ class InitCatalogTestCase(unittest.TestCase):
 
         os.chdir(self.olddir)
 
-    def  _i18n_dir(self):
+    def _i18n_dir(self):
         return os.path.join(self.datadir, 'project', 'i18n')
 
     def _po_file(self, locale):
@@ -380,8 +402,8 @@ msgstr[0] ""
 msgstr[1] ""
 
 """ % {'version': VERSION,
-       'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
-                               tzinfo=LOCALTZ, locale='en')}
+            'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
+                                    tzinfo=LOCALTZ, locale='en')}
         with open(po_file, 'U') as f:
             actual_content = f.read()
         self.assertEqual(expected_content, actual_content)
@@ -431,8 +453,8 @@ msgstr[0] ""
 msgstr[1] ""
 
 """ % {'version': VERSION,
-       'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
-                               tzinfo=LOCALTZ, locale='en')}
+            'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
+                                    tzinfo=LOCALTZ, locale='en')}
         with open(po_file, 'U') as f:
             actual_content = f.read()
         self.assertEqual(expected_content, actual_content)
@@ -484,8 +506,8 @@ msgstr[1] ""
 msgstr[2] ""
 
 """ % {'version': VERSION,
-       'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
-                               tzinfo=LOCALTZ, locale='en')}
+            'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
+                                    tzinfo=LOCALTZ, locale='en')}
         with open(po_file, 'U') as f:
             actual_content = f.read()
         self.assertEqual(expected_content, actual_content)
@@ -534,8 +556,8 @@ msgid_plural "foobars"
 msgstr[0] ""
 
 """ % {'version': VERSION,
-       'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
-                               tzinfo=LOCALTZ, locale='ja_JP')}
+            'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
+                                    tzinfo=LOCALTZ, locale='ja_JP')}
         with open(po_file, 'U') as f:
             actual_content = f.read()
         self.assertEqual(expected_content, actual_content)
@@ -545,7 +567,7 @@ msgstr[0] ""
         self.cmd.locale = 'en_US'
         self.cmd.output_dir = 'project/i18n'
 
-        long_message = '"'+ 'xxxxx '*15 + '"'
+        long_message = '"' + 'xxxxx ' * 15 + '"'
 
         with open('project/i18n/messages.pot', 'rb') as f:
             pot_contents = f.read().decode('latin-1')
@@ -593,9 +615,9 @@ msgstr[0] ""
 msgstr[1] ""
 
 """ % {'version': VERSION,
-       'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
-                               tzinfo=LOCALTZ, locale='en_US'),
-       'long_message': long_message}
+            'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
+                                    tzinfo=LOCALTZ, locale='en_US'),
+            'long_message': long_message}
         with open(po_file, 'U') as f:
             actual_content = f.read()
         self.assertEqual(expected_content, actual_content)
@@ -605,7 +627,7 @@ msgstr[1] ""
         self.cmd.locale = 'en_US'
         self.cmd.output_dir = 'project/i18n'
 
-        long_message = '"'+ 'xxxxx '*15 + '"'
+        long_message = '"' + 'xxxxx ' * 15 + '"'
 
         with open('project/i18n/messages.pot', 'rb') as f:
             pot_contents = f.read().decode('latin-1')
@@ -652,9 +674,9 @@ msgstr[0] ""
 msgstr[1] ""
 
 """ % {'version': VERSION,
-       'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
-                               tzinfo=LOCALTZ, locale='en_US'),
-       'long_message': long_message}
+            'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
+                                    tzinfo=LOCALTZ, locale='en_US'),
+            'long_message': long_message}
         with open(po_file, 'U') as f:
             actual_content = f.read()
         self.assertEqual(expected_content, actual_content)
@@ -767,11 +789,11 @@ commands:
     def test_extract_with_default_mapping(self):
         pot_file = self._pot_file()
         self.cli.run(sys.argv + ['extract',
-            '--copyright-holder', 'FooBar, Inc.',
-            '--project', 'TestProject', '--version', '0.1',
-            '--msgid-bugs-address', 'bugs.address@email.tld',
-            '-c', 'TRANSLATOR', '-c', 'TRANSLATORS:',
-            '-o', pot_file, 'project'])
+                                 '--copyright-holder', 'FooBar, Inc.',
+                                 '--project', 'TestProject', '--version', '0.1',
+                                 '--msgid-bugs-address', 'bugs.address@email.tld',
+                                 '-c', 'TRANSLATOR', '-c', 'TRANSLATORS:',
+                                 '-o', pot_file, 'project'])
         self.assert_pot_file_exists()
         expected_content = r"""# Translations template for TestProject.
 # Copyright (C) %(year)s FooBar, Inc.
@@ -812,9 +834,9 @@ msgstr[0] ""
 msgstr[1] ""
 
 """ % {'version': VERSION,
-       'year': time.strftime('%Y'),
-       'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
-                               tzinfo=LOCALTZ, locale='en')}
+            'year': time.strftime('%Y'),
+            'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
+                                    tzinfo=LOCALTZ, locale='en')}
         with open(pot_file, 'U') as f:
             actual_content = f.read()
         self.assertEqual(expected_content, actual_content)
@@ -822,12 +844,12 @@ msgstr[1] ""
     def test_extract_with_mapping_file(self):
         pot_file = self._pot_file()
         self.cli.run(sys.argv + ['extract',
-            '--copyright-holder', 'FooBar, Inc.',
-            '--project', 'TestProject', '--version', '0.1',
-            '--msgid-bugs-address', 'bugs.address@email.tld',
-            '--mapping', os.path.join(self.datadir, 'mapping.cfg'),
-            '-c', 'TRANSLATOR', '-c', 'TRANSLATORS:',
-            '-o', pot_file, 'project'])
+                                 '--copyright-holder', 'FooBar, Inc.',
+                                 '--project', 'TestProject', '--version', '0.1',
+                                 '--msgid-bugs-address', 'bugs.address@email.tld',
+                                 '--mapping', os.path.join(self.datadir, 'mapping.cfg'),
+                                 '-c', 'TRANSLATOR', '-c', 'TRANSLATORS:',
+                                 '-o', pot_file, 'project'])
         self.assert_pot_file_exists()
         expected_content = r"""# Translations template for TestProject.
 # Copyright (C) %(year)s FooBar, Inc.
@@ -862,9 +884,57 @@ msgstr[0] ""
 msgstr[1] ""
 
 """ % {'version': VERSION,
-       'year': time.strftime('%Y'),
-       'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
-                               tzinfo=LOCALTZ, locale='en')}
+            'year': time.strftime('%Y'),
+            'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
+                                    tzinfo=LOCALTZ, locale='en')}
+        with open(pot_file, 'U') as f:
+            actual_content = f.read()
+        self.assertEqual(expected_content, actual_content)
+
+    def test_extract_with_exact_file(self):
+        """Tests that we can call extract with a particular file and only
+        strings from that file get extracted. (Note the absence of strings from file1.py)
+        """
+        pot_file = self._pot_file()
+        file_to_extract = os.path.join(self.datadir, 'project', 'file2.py')
+        self.cli.run(sys.argv + ['extract',
+                                 '--copyright-holder', 'FooBar, Inc.',
+                                 '--project', 'TestProject', '--version', '0.1',
+                                 '--msgid-bugs-address', 'bugs.address@email.tld',
+                                 '--mapping', os.path.join(self.datadir, 'mapping.cfg'),
+                                 '-c', 'TRANSLATOR', '-c', 'TRANSLATORS:',
+                                 '-o', pot_file, file_to_extract])
+        self.assert_pot_file_exists()
+        expected_content = r"""# Translations template for TestProject.
+# Copyright (C) %(year)s FooBar, Inc.
+# This file is distributed under the same license as the TestProject
+# project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, %(year)s.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: TestProject 0.1\n"
+"Report-Msgid-Bugs-To: bugs.address@email.tld\n"
+"POT-Creation-Date: %(date)s\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel %(version)s\n"
+
+#: project/file2.py:9
+msgid "foobar"
+msgid_plural "foobars"
+msgstr[0] ""
+msgstr[1] ""
+
+""" % {'version': VERSION,
+            'year': time.strftime('%Y'),
+            'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
+                                    tzinfo=LOCALTZ, locale='en')}
         with open(pot_file, 'U') as f:
             actual_content = f.read()
         self.assertEqual(expected_content, actual_content)
@@ -872,9 +942,9 @@ msgstr[1] ""
     def test_init_with_output_dir(self):
         po_file = self._po_file('en_US')
         self.cli.run(sys.argv + ['init',
-            '--locale', 'en_US',
-            '-d', os.path.join(self._i18n_dir()),
-            '-i', os.path.join(self._i18n_dir(), 'messages.pot')])
+                                 '--locale', 'en_US',
+                                 '-d', os.path.join(self._i18n_dir()),
+                                 '-i', os.path.join(self._i18n_dir(), 'messages.pot')])
         assert os.path.isfile(po_file)
         expected_content = r"""# English (United States) translations for TestProject.
 # Copyright (C) 2007 FooBar, Inc.
@@ -882,7 +952,6 @@ msgstr[1] ""
 # project.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2007.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: TestProject 0.1\n"
@@ -911,21 +980,21 @@ msgstr[0] ""
 msgstr[1] ""
 
 """ % {'version': VERSION,
-       'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
-                               tzinfo=LOCALTZ, locale='en')}
+            'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
+                                    tzinfo=LOCALTZ, locale='en')}
         with open(po_file, 'U') as f:
             actual_content = f.read()
         self.assertEqual(expected_content, actual_content)
 
-    def  _i18n_dir(self):
+    def _i18n_dir(self):
         return os.path.join(self.datadir, 'project', 'i18n')
 
     def test_init_singular_plural_forms(self):
         po_file = self._po_file('ja_JP')
         self.cli.run(sys.argv + ['init',
-            '--locale', 'ja_JP',
-            '-d', os.path.join(self._i18n_dir()),
-            '-i', os.path.join(self._i18n_dir(), 'messages.pot')])
+                                 '--locale', 'ja_JP',
+                                 '-d', os.path.join(self._i18n_dir()),
+                                 '-i', os.path.join(self._i18n_dir(), 'messages.pot')])
         assert os.path.isfile(po_file)
         expected_content = r"""# Japanese (Japan) translations for TestProject.
 # Copyright (C) 2007 FooBar, Inc.
@@ -933,7 +1002,6 @@ msgstr[1] ""
 # project.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2007.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: TestProject 0.1\n"
@@ -961,8 +1029,8 @@ msgid_plural "foobars"
 msgstr[0] ""
 
 """ % {'version': VERSION,
-       'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
-                               tzinfo=LOCALTZ, locale='en')}
+            'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
+                                    tzinfo=LOCALTZ, locale='en')}
         with open(po_file, 'U') as f:
             actual_content = f.read()
         self.assertEqual(expected_content, actual_content)
@@ -970,9 +1038,9 @@ msgstr[0] ""
     def test_init_more_than_2_plural_forms(self):
         po_file = self._po_file('lv_LV')
         self.cli.run(sys.argv + ['init',
-            '--locale', 'lv_LV',
-            '-d', self._i18n_dir(),
-            '-i', os.path.join(self._i18n_dir(), 'messages.pot')])
+                                 '--locale', 'lv_LV',
+                                 '-d', self._i18n_dir(),
+                                 '-i', os.path.join(self._i18n_dir(), 'messages.pot')])
         assert os.path.isfile(po_file)
         expected_content = r"""# Latvian (Latvia) translations for TestProject.
 # Copyright (C) 2007 FooBar, Inc.
@@ -980,7 +1048,6 @@ msgstr[0] ""
 # project.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2007.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: TestProject 0.1\n"
@@ -1011,8 +1078,8 @@ msgstr[1] ""
 msgstr[2] ""
 
 """ % {'version': VERSION,
-       'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
-                               tzinfo=LOCALTZ, locale='en')}
+            'date': format_datetime(datetime.now(LOCALTZ), 'yyyy-MM-dd HH:mmZ',
+                                    tzinfo=LOCALTZ, locale='en')}
         with open(po_file, 'U') as f:
             actual_content = f.read()
         self.assertEqual(expected_content, actual_content)
@@ -1021,11 +1088,11 @@ msgstr[2] ""
         po_file = self._po_file('de_DE')
         mo_file = po_file.replace('.po', '.mo')
         self.cli.run(sys.argv + ['compile',
-            '--locale', 'de_DE',
-            '-d', self._i18n_dir()])
+                                 '--locale', 'de_DE',
+                                 '-d', self._i18n_dir()])
         assert not os.path.isfile(mo_file), 'Expected no file at %r' % mo_file
         self.assertEqual("""\
-catalog %r is marked as fuzzy, skipping
+catalog %s is marked as fuzzy, skipping
 """ % (po_file), sys.stderr.getvalue())
 
     def test_compile_fuzzy_catalog(self):
@@ -1033,11 +1100,11 @@ catalog %r is marked as fuzzy, skipping
         mo_file = po_file.replace('.po', '.mo')
         try:
             self.cli.run(sys.argv + ['compile',
-                '--locale', 'de_DE', '--use-fuzzy',
-                '-d', self._i18n_dir()])
+                                     '--locale', 'de_DE', '--use-fuzzy',
+                                     '-d', self._i18n_dir()])
             assert os.path.isfile(mo_file)
             self.assertEqual("""\
-compiling catalog %r to %r
+compiling catalog %s to %s
 """ % (po_file, mo_file), sys.stderr.getvalue())
         finally:
             if os.path.isfile(mo_file):
@@ -1052,15 +1119,72 @@ compiling catalog %r to %r
         mo_file = po_file.replace('.po', '.mo')
         try:
             self.cli.run(sys.argv + ['compile',
-                '--locale', 'ru_RU', '--use-fuzzy',
-                '-d', self._i18n_dir()])
+                                     '--locale', 'ru_RU', '--use-fuzzy',
+                                     '-d', self._i18n_dir()])
             assert os.path.isfile(mo_file)
             self.assertEqual("""\
-compiling catalog %r to %r
+compiling catalog %s to %s
 """ % (po_file, mo_file), sys.stderr.getvalue())
         finally:
             if os.path.isfile(mo_file):
                 os.unlink(mo_file)
+
+    def test_compile_catalog_multidomain(self):
+        po_foo = os.path.join(self._i18n_dir(), 'de_DE', 'LC_MESSAGES',
+                              'foo.po')
+        po_bar = os.path.join(self._i18n_dir(), 'de_DE', 'LC_MESSAGES',
+                              'bar.po')
+        mo_foo = po_foo.replace('.po', '.mo')
+        mo_bar = po_bar.replace('.po', '.mo')
+        try:
+            self.cli.run(sys.argv + ['compile',
+                                     '--locale', 'de_DE', '--domain', 'foo bar', '--use-fuzzy',
+                                     '-d', self._i18n_dir()])
+            for mo_file in [mo_foo, mo_bar]:
+                assert os.path.isfile(mo_file)
+            self.assertEqual("""\
+compiling catalog %s to %s
+compiling catalog %s to %s
+""" % (po_foo, mo_foo, po_bar, mo_bar), sys.stderr.getvalue())
+
+        finally:
+            for mo_file in [mo_foo, mo_bar]:
+                if os.path.isfile(mo_file):
+                    os.unlink(mo_file)
+
+    def test_update(self):
+        template = Catalog()
+        template.add("1")
+        template.add("2")
+        template.add("3")
+        tmpl_file = os.path.join(self._i18n_dir(), 'temp-template.pot')
+        with open(tmpl_file, "wb") as outfp:
+            write_po(outfp, template)
+        po_file = os.path.join(self._i18n_dir(), 'temp1.po')
+        self.cli.run(sys.argv + ['init',
+                                 '-l', 'fi',
+                                 '-o', po_file,
+                                 '-i', tmpl_file
+                                 ])
+        with open(po_file, "r") as infp:
+            catalog = read_po(infp)
+            assert len(catalog) == 3
+
+        # Add another entry to the template
+
+        template.add("4")
+
+        with open(tmpl_file, "wb") as outfp:
+            write_po(outfp, template)
+
+        self.cli.run(sys.argv + ['update',
+                                 '-l', 'fi_FI',
+                                 '-o', po_file,
+                                 '-i', tmpl_file])
+
+        with open(po_file, "r") as infp:
+            catalog = read_po(infp)
+            assert len(catalog) == 4  # Catalog was updated
 
 
 def test_parse_mapping():
@@ -1106,3 +1230,127 @@ def test_parse_keywords():
         'dngettext': (2, 3),
         'pgettext': ((1, 'c'), 2),
     }
+
+
+def configure_cli_command(cmdline):
+    """
+    Helper to configure a command class, but not run it just yet.
+
+    :param cmdline: The command line (sans the executable name)
+    :return: Command instance
+    """
+    args = shlex.split(cmdline)
+    cli = CommandLineInterface()
+    cmdinst = cli._configure_command(cmdname=args[0], argv=args[1:])
+    return cmdinst
+
+
+def configure_distutils_command(cmdline):
+    """
+    Helper to configure a command class, but not run it just yet.
+
+    This will have strange side effects if you pass in things
+    `distutils` deals with internally.
+
+    :param cmdline: The command line (sans the executable name)
+    :return: Command instance
+    """
+    d = Distribution(attrs={
+        "cmdclass": vars(frontend),
+        "script_args": shlex.split(cmdline),
+    })
+    d.parse_command_line()
+    assert len(d.commands) == 1
+    cmdinst = d.get_command_obj(d.commands[0])
+    cmdinst.ensure_finalized()
+    return cmdinst
+
+
+@pytest.mark.parametrize("split", (False, True))
+@pytest.mark.parametrize("arg_name", ("-k", "--keyword", "--keywords"))
+def test_extract_keyword_args_384(split, arg_name):
+    # This is a regression test for https://github.com/python-babel/babel/issues/384
+    # and it also tests that the rest of the forgotten aliases/shorthands implied by
+    # https://github.com/python-babel/babel/issues/390 are re-remembered (or rather
+    # that the mechanism for remembering them again works).
+
+    kwarg_specs = [
+        "gettext_noop",
+        "gettext_lazy",
+        "ngettext_lazy:1,2",
+        "ugettext_noop",
+        "ugettext_lazy",
+        "ungettext_lazy:1,2",
+        "pgettext_lazy:1c,2",
+        "npgettext_lazy:1c,2,3",
+    ]
+
+    if split:  # Generate a command line with multiple -ks
+        kwarg_text = " ".join("%s %s" % (arg_name, kwarg_spec) for kwarg_spec in kwarg_specs)
+    else:  # Generate a single space-separated -k
+        kwarg_text = "%s \"%s\"" % (arg_name, " ".join(kwarg_specs))
+
+    # (Both of those invocation styles should be equivalent, so there is no parametrization from here on out)
+
+    cmdinst = configure_cli_command(
+        "extract -F babel-django.cfg --add-comments Translators: -o django232.pot %s ." % kwarg_text
+    )
+    assert isinstance(cmdinst, extract_messages)
+    assert set(cmdinst.keywords.keys()) == set((
+        '_',
+        'dgettext',
+        'dngettext',
+        'gettext',
+        'gettext_lazy',
+        'gettext_noop',
+        'N_',
+        'ngettext',
+        'ngettext_lazy',
+        'npgettext',
+        'npgettext_lazy',
+        'pgettext',
+        'pgettext_lazy',
+        'ugettext',
+        'ugettext_lazy',
+        'ugettext_noop',
+        'ungettext',
+        'ungettext_lazy',
+    ))
+
+
+@pytest.mark.parametrize("kwarg,expected", [
+    ("LW_", ("LW_",)),
+    ("LW_ QQ Q", ("LW_", "QQ", "Q")),
+    ("yiy         aia", ("yiy", "aia")),
+])
+def test_extract_distutils_keyword_arg_388(kwarg, expected):
+    # This is a regression test for https://github.com/python-babel/babel/issues/388
+
+    # Note that distutils-based commands only support a single repetition of the same argument;
+    # hence `--keyword ignored` will actually never end up in the output.
+
+    cmdinst = configure_distutils_command(
+        "extract_messages --no-default-keywords --keyword ignored --keyword '%s' "
+        "--input-dirs . --output-file django233.pot --add-comments Bar,Foo" % kwarg
+    )
+    assert isinstance(cmdinst, extract_messages)
+    assert set(cmdinst.keywords.keys()) == set(expected)
+
+    # Test the comma-separated comment argument while we're at it:
+    assert set(cmdinst.add_comments) == set(("Bar", "Foo"))
+
+
+def test_update_catalog_boolean_args():
+    cmdinst = configure_cli_command("update --no-wrap -N --ignore-obsolete --previous -i foo -o foo -l en")
+    assert isinstance(cmdinst, update_catalog)
+    assert cmdinst.no_wrap is True
+    assert cmdinst.no_fuzzy_matching is True
+    assert cmdinst.ignore_obsolete is True
+    assert cmdinst.previous is False  # Mutually exclusive with no_fuzzy_matching
+
+
+def test_extract_cli_knows_dash_s():
+    # This is a regression test for https://github.com/python-babel/babel/issues/390
+    cmdinst = configure_cli_command("extract -s -o foo babel")
+    assert isinstance(cmdinst, extract_messages)
+    assert cmdinst.strip_comments

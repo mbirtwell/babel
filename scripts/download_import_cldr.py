@@ -5,7 +5,6 @@ import sys
 import shutil
 import hashlib
 import zipfile
-import urllib
 import subprocess
 try:
     from urllib.request import urlretrieve
@@ -13,9 +12,9 @@ except ImportError:
     from urllib import urlretrieve
 
 
-URL = 'http://unicode.org/Public/cldr/26/core.zip'
-FILENAME = 'core-26.zip'
-FILESUM = '46220170238b092685fd24221f895e3d'
+URL = 'http://unicode.org/Public/cldr/29/core.zip'
+FILENAME = 'core-29.zip'
+FILESUM = '44d117e6e591a8f9655602ff0abdee105df3cabe'
 BLKSIZE = 131072
 
 
@@ -53,7 +52,7 @@ def is_good_file(filename):
     if not os.path.isfile(filename):
         log('Local copy \'%s\' not found', filename)
         return False
-    h = hashlib.md5()
+    h = hashlib.sha1()
     with open(filename, 'rb') as f:
         while 1:
             blk = f.read(BLKSIZE)
@@ -71,8 +70,9 @@ def is_good_file(filename):
 def main():
     scripts_path = os.path.dirname(os.path.abspath(__file__))
     repo = os.path.dirname(scripts_path)
-    cldr_path = os.path.join(repo, 'cldr')
-    zip_path = os.path.join(cldr_path, FILENAME)
+    cldr_dl_path = os.path.join(repo, 'cldr')
+    cldr_path = os.path.join(repo, 'cldr', os.path.splitext(FILENAME)[0])
+    zip_path = os.path.join(cldr_dl_path, FILENAME)
     changed = False
 
     while not is_good_file(zip_path):

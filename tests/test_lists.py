@@ -3,7 +3,6 @@ from babel import lists
 
 
 def test_format_list():
-
     for list, locale, expected in [
         ([], 'en', ''),
         ([u'string'], 'en', u'string'),

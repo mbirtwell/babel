@@ -10,13 +10,12 @@
 # This software consists of voluntary contributions made by many
 # individuals. For the exact contribution history, see the revision
 # history and logs, available at http://babel.edgewall.org/log/.
-import decimal
 import unittest
 
 import pytest
 
-from babel import plural, Locale
-from babel.messages.plurals import get_plural
+from babel import plural, localedata
+from babel._compat import Decimal
 
 
 def test_plural_rule():
@@ -36,29 +35,29 @@ def test_plural_rule_operands_i():
 
 def test_plural_rule_operands_v():
     rule = plural.PluralRule({'one': 'v is 2'})
-    assert rule(decimal.Decimal('1.20')) == 'one'
-    assert rule(decimal.Decimal('1.2')) == 'other'
+    assert rule(Decimal('1.20')) == 'one'
+    assert rule(Decimal('1.2')) == 'other'
     assert rule(2) == 'other'
 
 
 def test_plural_rule_operands_w():
     rule = plural.PluralRule({'one': 'w is 2'})
-    assert rule(decimal.Decimal('1.23')) == 'one'
-    assert rule(decimal.Decimal('1.20')) == 'other'
+    assert rule(Decimal('1.23')) == 'one'
+    assert rule(Decimal('1.20')) == 'other'
     assert rule(1.2) == 'other'
 
 
 def test_plural_rule_operands_f():
     rule = plural.PluralRule({'one': 'f is 20'})
-    assert rule(decimal.Decimal('1.23')) == 'other'
-    assert rule(decimal.Decimal('1.20')) == 'one'
+    assert rule(Decimal('1.23')) == 'other'
+    assert rule(Decimal('1.20')) == 'one'
     assert rule(1.2) == 'other'
 
 
 def test_plural_rule_operands_t():
     rule = plural.PluralRule({'one': 't = 5'})
-    assert rule(decimal.Decimal('1.53')) == 'other'
-    assert rule(decimal.Decimal('1.50')) == 'one'
+    assert rule(Decimal('1.53')) == 'other'
+    assert rule(Decimal('1.50')) == 'one'
     assert rule(1.5) == 'one'
 
 
@@ -135,10 +134,10 @@ def test_plural_within_rules():
 
 def test_locales_with_no_plural_rules_have_default():
     from babel import Locale
-    aa_plural = Locale.parse('aa').plural_form
-    assert aa_plural(1) == 'other'
-    assert aa_plural(2) == 'other'
-    assert aa_plural(15) == 'other'
+    pf = Locale.parse('ii').plural_form
+    assert pf(1) == 'other'
+    assert pf(2) == 'other'
+    assert pf(15) == 'other'
 
 
 WELL_FORMED_TOKEN_TESTS = (
@@ -147,7 +146,7 @@ WELL_FORMED_TOKEN_TESTS = (
     ('n = 1 @integer 1', [('value', '1'), ('symbol', '='), ('word', 'n'), ]),
     ('n is 1', [('value', '1'), ('word', 'is'), ('word', 'n'), ]),
     ('n % 100 = 3..10', [('value', '10'), ('ellipsis', '..'), ('value', '3'),
-                         ('symbol', '='),  ('value', '100'), ('symbol', '%'),
+                         ('symbol', '='), ('value', '100'), ('symbol', '%'),
                          ('word', 'n'), ]),
 )
 
@@ -169,6 +168,7 @@ def test_tokenize_malformed(rule_text):
 
 
 class TestNextTokenTestCase(unittest.TestCase):
+
     def test_empty(self):
         assert not plural.test_next_token([], '')
 
@@ -199,6 +199,7 @@ def make_range_list(*values):
 
 
 class PluralRuleParserTestCase(unittest.TestCase):
+
     def setUp(self):
         self.n = plural.ident_node('n')
 
@@ -253,21 +254,20 @@ EXTRACT_OPERANDS_TESTS = (
 
 @pytest.mark.parametrize('source,n,i,v,w,f,t', EXTRACT_OPERANDS_TESTS)
 def test_extract_operands(source, n, i, v, w, f, t):
-    source = decimal.Decimal(source) if isinstance(source, str) else source
+    source = Decimal(source) if isinstance(source, str) else source
     assert (plural.extract_operands(source) ==
-            decimal.Decimal(n), i, v, w, f, t)
+            Decimal(n), i, v, w, f, t)
 
 
-@pytest.mark.parametrize(('locale', 'num_plurals', 'plural_expr'), [
-    (Locale('en'), 2, '(n != 1)'),
-    (Locale('en', 'US'), 2, '(n != 1)'),
-    (Locale('zh'), 1, '0'),
-    (Locale('zh', script='Hans'), 1, '0'),
-    (Locale('zh', script='Hant'), 1, '0'),
-    (Locale('zh', 'CN', 'Hans'), 1, '0'),
-    (Locale('zh', 'TW', 'Hant'), 1, '0'),
-])
-def test_get_plural(locale, num_plurals, plural_expr):
-    plurals = get_plural(locale)
-    assert plurals.num_plurals == num_plurals
-    assert plurals.plural_expr == plural_expr
+@pytest.mark.parametrize('locale', ('ru', 'pl'))
+def test_gettext_compilation(locale):
+    # Test that new plural form elements introduced in recent CLDR versions
+    # are compiled "down" to `n` when emitting Gettext rules.
+    ru_rules = localedata.load(locale)['plural_form'].rules
+    chars = 'ivwft'
+    # Test that these rules are valid for this test; i.e. that they contain at least one
+    # of the gettext-unsupported characters.
+    assert any((" " + ch + " ") in rule for ch in chars for rule in ru_rules.values())
+    # Then test that the generated value indeed does not contain these.
+    ru_rules_gettext = plural.to_gettext(ru_rules)
+    assert not any(ch in ru_rules_gettext for ch in chars)

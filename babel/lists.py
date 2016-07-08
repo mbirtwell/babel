@@ -21,9 +21,9 @@ DEFAULT_LOCALE = default_locale()
 
 
 def format_list(lst, locale=DEFAULT_LOCALE):
-    """ Formats `lst` as a list
+    """
+    Format the items in `lst` as a list.
 
-    e.g.
     >>> format_list(['apples', 'oranges', 'pears'], 'en')
     u'apples, oranges, and pears'
     >>> format_list(['apples', 'oranges', 'pears'], 'zh')
@@ -31,7 +31,6 @@ def format_list(lst, locale=DEFAULT_LOCALE):
 
     :param lst: a sequence of items to format in to a list
     :param locale: the locale
-    :return:
     """
     locale = Locale.parse(locale)
     if not lst:
@@ -40,8 +39,10 @@ def format_list(lst, locale=DEFAULT_LOCALE):
         return lst[0]
     if len(lst) == 2:
         return locale.list_patterns['2'].format(*lst)
+
     result = locale.list_patterns['start'].format(lst[0], lst[1])
     for elem in lst[2:-1]:
         result = locale.list_patterns['middle'].format(result, elem)
     result = locale.list_patterns['end'].format(result, lst[-1])
+
     return result

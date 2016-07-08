@@ -8,28 +8,12 @@ environment:
     CMD_IN_ENV: "cmd /E:ON /V:ON /C .\\.ci\\run_with_env.cmd"
 
   matrix:
-    - PYTHON: "C:\\Python27"
-      PYTHON_VERSION: "2.7.x"
+    - PYTHON: "C:\\Python35"
+      PYTHON_VERSION: "3.5.x"
       PYTHON_ARCH: "32"
 
-    - PYTHON: "C:\\Python27-x64"
-      PYTHON_VERSION: "2.7.x"
-      PYTHON_ARCH: "64"
-
-    - PYTHON: "C:\\Python33"
-      PYTHON_VERSION: "3.3.x"
-      PYTHON_ARCH: "32"
-
-    - PYTHON: "C:\\Python33-x64"
-      PYTHON_VERSION: "3.3.x"
-      PYTHON_ARCH: "64"
-
-    - PYTHON: "C:\\Python34"
-      PYTHON_VERSION: "3.4.x"
-      PYTHON_ARCH: "32"
-
-    - PYTHON: "C:\\Python34-x64"
-      PYTHON_VERSION: "3.4.x"
+    - PYTHON: "C:\\Python35-x64"
+      PYTHON_VERSION: "3.5.x"
       PYTHON_ARCH: "64"
 
 branches:  # Only build official branches, PRs are built anyway.
@@ -43,10 +27,12 @@ install:
   - "python --version"
   - "python -c \"import struct; print(struct.calcsize('P') * 8)\""
   # Build data files
-  - "pip install . pytest"
+  - "pip install --upgrade pytest==2.8.5 pytest-cov==2.2.0 codecov"
+  - "pip install --editable ."
   - "python setup.py import_cldr"
 
 build: false  # Not a C# project, build stuff at the test step instead.
 
 test_script:
-  - "%CMD_IN_ENV% python -m pytest"
+  - "%CMD_IN_ENV% python -m pytest --cov=babel"
+  - "codecov"

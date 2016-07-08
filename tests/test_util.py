@@ -14,6 +14,7 @@
 import unittest
 
 from babel import util
+from babel._compat import BytesIO
 
 
 def test_distinct():
@@ -27,6 +28,7 @@ def test_pathmatch():
     assert not util.pathmatch('**.py', 'templates/index.html')
     assert util.pathmatch('**/templates/*.html', 'templates/index.html')
     assert not util.pathmatch('**/templates/*.html', 'templates/foo/bar.html')
+
 
 def test_odict_pop():
     odict = util.odict()
@@ -43,6 +45,7 @@ def test_odict_pop():
 
 
 class FixedOffsetTimezoneTestCase(unittest.TestCase):
+
     def test_zone_negative_offset(self):
         self.assertEqual('Etc/GMT-60', util.FixedOffsetTimezone(-60).zone)
 
@@ -52,3 +55,17 @@ class FixedOffsetTimezoneTestCase(unittest.TestCase):
     def test_zone_positive_offset(self):
         self.assertEqual('Etc/GMT+330', util.FixedOffsetTimezone(330).zone)
 
+
+parse_encoding = lambda s: util.parse_encoding(BytesIO(s.encode('utf-8')))
+
+
+def test_parse_encoding_defined():
+    assert parse_encoding(u'# coding: utf-8') == 'utf-8'
+
+
+def test_parse_encoding_undefined():
+    assert parse_encoding(u'') is None
+
+
+def test_parse_encoding_non_ascii():
+    assert parse_encoding(u'K\xf6ln') is None

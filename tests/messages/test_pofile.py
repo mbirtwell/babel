@@ -164,6 +164,48 @@ msgstr "Bahr"
         self.assertEqual(1, len(catalog))
         self.assertEqual(0, len(catalog.obsolete))
 
+    def test_multi_line_obsolete_message(self):
+        buf = StringIO(r'''# This is an obsolete message
+#~ msgid ""
+#~ "foo"
+#~ "foo"
+#~ msgstr ""
+#~ "Voh"
+#~ "Vooooh"
+
+# This message is not obsolete
+#: main.py:1
+msgid "bar"
+msgstr "Bahr"
+''')
+        catalog = pofile.read_po(buf)
+        self.assertEqual(1, len(catalog.obsolete))
+        message = catalog.obsolete[u'foofoo']
+        self.assertEqual(u'foofoo', message.id)
+        self.assertEqual(u'VohVooooh', message.string)
+        self.assertEqual(['This is an obsolete message'], message.user_comments)
+
+    def test_unit_following_multi_line_obsolete_message(self):
+        buf = StringIO(r'''# This is an obsolete message
+#~ msgid ""
+#~ "foo"
+#~ "fooooooo"
+#~ msgstr ""
+#~ "Voh"
+#~ "Vooooh"
+
+# This message is not obsolete
+#: main.py:1
+msgid "bar"
+msgstr "Bahr"
+''')
+        catalog = pofile.read_po(buf)
+        self.assertEqual(1, len(catalog))
+        message = catalog[u'bar']
+        self.assertEqual(u'bar', message.id)
+        self.assertEqual(u'Bahr', message.string)
+        self.assertEqual(['This message is not obsolete'], message.user_comments)
+
     def test_with_context(self):
         buf = BytesIO(b'''# Some string in the menu
 #: main.py:1
@@ -188,7 +230,7 @@ msgstr "Bahr"
         out_buf = BytesIO()
         pofile.write_po(out_buf, catalog, omit_header=True)
         assert out_buf.getvalue().strip() == buf.getvalue().strip(), \
-                                                            out_buf.getvalue()
+            out_buf.getvalue()
 
     def test_with_context_two(self):
         buf = BytesIO(b'''msgctxt "Menu"
@@ -299,7 +341,7 @@ not be removed
         catalog.add(text, locations=[('main.py', 1)])
         buf = BytesIO()
         pofile.write_po(buf, catalog, no_location=True, omit_header=True,
-                         width=42)
+                        width=42)
         self.assertEqual(b'''msgid ""
 "Here's some text where\\n"
 "white space and line breaks matter, and"
@@ -317,7 +359,7 @@ includesareallylongwordthatmightbutshouldnt throw us into an infinite loop
         catalog.add(text, locations=[('main.py', 1)])
         buf = BytesIO()
         pofile.write_po(buf, catalog, no_location=True, omit_header=True,
-                         width=32)
+                        width=32)
         self.assertEqual(b'''msgid ""
 "Here's some text that\\n"
 "includesareallylongwordthatmightbutshouldnt"
@@ -513,6 +555,30 @@ msgstr[0] "Voh"
 msgstr[1] "Voeh"''' in value
         assert value.find(b'msgid ""') < value.find(b'msgid "bar"') < value.find(b'msgid "foo"')
 
+    def test_file_sorted_po(self):
+        catalog = Catalog()
+        catalog.add(u'bar', locations=[('utils.py', 3)])
+        catalog.add((u'foo', u'foos'), (u'Voh', u'Voeh'), locations=[('main.py', 1)])
+        buf = BytesIO()
+        pofile.write_po(buf, catalog, sort_by_file=True)
+        value = buf.getvalue().strip()
+        assert value.find(b'main.py') < value.find(b'utils.py')
+
+    def test_file_with_no_lineno(self):
+        catalog = Catalog()
+        catalog.add(u'bar', locations=[('utils.py', None)],
+                    user_comments=['Comment About `bar` with',
+                                   'multiple lines.'])
+        buf = BytesIO()
+        pofile.write_po(buf, catalog, sort_output=True)
+        value = buf.getvalue().strip()
+        assert b'''\
+# Comment About `bar` with
+# multiple lines.
+#: utils.py
+msgid "bar"
+msgstr ""''' in value
+
     def test_silent_location_fallback(self):
         buf = BytesIO(b'''\
 #: broken_file.py
@@ -523,7 +589,7 @@ msgstr ""
 msgid "broken line number"
 msgstr ""''')
         catalog = pofile.read_po(buf)
-        self.assertEqual(catalog['missing line number'].locations, [])
+        self.assertEqual(catalog['missing line number'].locations, [(u'broken_file.py', None)])
         self.assertEqual(catalog['broken line number'].locations, [])
 
 

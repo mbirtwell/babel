@@ -85,8 +85,8 @@ inherited from C and POSIX. The patterns used in Babel are based on the
 follows:
 
     A date/time pattern is a string of characters, where specific strings of
-    characters are replaced with date and time data from a calendar when formatting
-    or used to generate data for a calendar when parsing. […]
+    characters are replaced with date and time data from a calendar when
+    formatting or used to generate data for a calendar when parsing. […]
 
     Characters may be used multiple times. For example, if ``y`` is used for the
     year, ``yy`` might produce "99", whereas ``yyyy`` produces "1999". For most
@@ -123,7 +123,8 @@ The syntax for custom datetime format patterns is described in detail in the
 the `Locale Data Markup Language specification`_. The following table is just a
 relatively brief overview.
 
- .. _`Locale Data Markup Language specification`: http://unicode.org/reports/tr35/#Date_Format_Patterns
+ .. _`Locale Data Markup Language specification`:
+    http://unicode.org/reports/tr35/#Date_Format_Patterns
 
 Date Fields
 -----------
@@ -352,7 +353,7 @@ functions in the ``babel.dates`` module, most importantly the
 
     >>> tz = get_timezone('Europe/Berlin')
     >>> get_timezone_name(tz, locale=Locale.parse('pt_PT'))
-    u'Hor\xe1rio Alemanha'
+    u'Hora da Europa Central'
 
 You can pass the function either a ``datetime.tzinfo`` object, or a
 ``datetime.date`` or ``datetime.datetime`` object. If you pass an actual date,

@@ -11,8 +11,9 @@
 # individuals. For the exact contribution history, see the revision
 # history and logs, available at http://babel.edgewall.org/log/.
 
-import doctest
 import unittest
+import random
+from operator import methodcaller
 
 from babel import localedata
 
@@ -72,3 +73,24 @@ def test_merge():
     d = {1: 'foo', 3: 'baz'}
     localedata.merge(d, {1: 'Foo', 2: 'Bar'})
     assert d == {1: 'Foo', 2: 'Bar', 3: 'baz'}
+
+
+def test_locale_identification():
+    for l in localedata.locale_identifiers():
+        assert localedata.exists(l)
+
+
+def test_unique_ids():
+    # Check all locale IDs are uniques.
+    all_ids = localedata.locale_identifiers()
+    assert len(all_ids) == len(set(all_ids))
+    # Check locale IDs don't collide after lower-case normalization.
+    lower_case_ids = list(map(methodcaller('lower'), all_ids))
+    assert len(lower_case_ids) == len(set(lower_case_ids))
+
+
+def test_mixedcased_locale():
+    for l in localedata.locale_identifiers():
+        locale_id = ''.join([
+            methodcaller(random.choice(['lower', 'upper']))(c) for c in l])
+        assert localedata.exists(locale_id)

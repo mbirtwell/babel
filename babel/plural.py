@@ -8,9 +8,10 @@
     :copyright: (c) 2013 by the Babel Team.
     :license: BSD, see LICENSE for more details.
 """
-import decimal
 import re
 import sys
+
+from babel._compat import Decimal
 
 
 _plural_tags = ('zero', 'one', 'two', 'few', 'many', 'other')
@@ -32,9 +33,9 @@ def extract_operands(source):
             # 2.6's Decimal cannot convert from float directly
             if sys.version_info < (2, 7):
                 n = str(n)
-            n = decimal.Decimal(n)
+            n = Decimal(n)
 
-    if isinstance(n, decimal.Decimal):
+    if isinstance(n, Decimal):
         dec_tuple = n.as_tuple()
         exp = dec_tuple.exponent
         fraction_digits = dec_tuple.digits[exp:] if exp < 0 else ()
@@ -85,14 +86,14 @@ class PluralRule(object):
         found = set()
         self.abstract = []
         for key, expr in sorted(list(rules)):
-            if key == 'other':
-                continue
             if key not in _plural_tags:
                 raise ValueError('unknown tag %r' % key)
             elif key in found:
                 raise ValueError('tag %r defined twice' % key)
             found.add(key)
-            self.abstract.append((key, _Parser(expr).ast))
+            ast = _Parser(expr).ast
+            if ast:
+                self.abstract.append((key, ast))
 
     def __repr__(self):
         rules = self.rules
@@ -185,9 +186,9 @@ def to_python(rule):
     :raise RuleError: if the expression is malformed
     """
     namespace = {
-        'IN':       in_range_list,
-        'WITHIN':   within_range_list,
-        'MOD':      cldr_modulo,
+        'IN': in_range_list,
+        'WITHIN': within_range_list,
+        'MOD': cldr_modulo,
         'extract_operands': extract_operands,
     }
     to_python_func = _PythonCompiler().compile
@@ -302,7 +303,7 @@ _RULES = [
                         .format(_VARS))),
     ('value', re.compile(r'\d+')),
     ('symbol', re.compile(r'%|,|!=|=')),
-    ('ellipsis', re.compile(r'\.\.'))
+    ('ellipsis', re.compile(r'\.{2,3}|\u2026', re.UNICODE))  # U+2026: ELLIPSIS
 ]
 
 
@@ -387,6 +388,11 @@ class _Parser(object):
 
     def __init__(self, string):
         self.tokens = tokenize_rule(string)
+        if not self.tokens:
+            # If the pattern is only samples, it's entirely possible
+            # no stream of tokens whatsoever is generated.
+            self.ast = None
+            return
         self.ast = self.condition()
         if self.tokens:
             raise RuleError('Expected end of rule, got %r' %
@@ -479,6 +485,9 @@ def _unary_compiler(tmpl):
     return lambda self, x: tmpl % self.compile(x)
 
 
+compile_zero = lambda x: '0'
+
+
 class _Compiler(object):
     """The compilers are able to transform the expressions into multiple
     output formats.
@@ -525,6 +534,12 @@ class _PythonCompiler(_Compiler):
 class _GettextCompiler(_Compiler):
     """Compile into a gettext plural expression."""
 
+    compile_i = _Compiler.compile_n
+    compile_v = compile_zero
+    compile_w = compile_zero
+    compile_f = compile_zero
+    compile_t = compile_zero
+
     def compile_relation(self, method, expr, range_list):
         rv = []
         expr = self.compile(expr)
@@ -551,10 +566,10 @@ class _JavaScriptCompiler(_GettextCompiler):
     # XXX: presently javascript does not support any of the
     # fraction support and basically only deals with integers.
     compile_i = lambda x: 'parseInt(n, 10)'
-    compile_v = lambda x: '0'
-    compile_w = lambda x: '0'
-    compile_f = lambda x: '0'
-    compile_t = lambda x: '0'
+    compile_v = compile_zero
+    compile_w = compile_zero
+    compile_f = compile_zero
+    compile_t = compile_zero
 
     def compile_relation(self, method, expr, range_list):
         code = _GettextCompiler.compile_relation(
