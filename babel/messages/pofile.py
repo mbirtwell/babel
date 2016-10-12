@@ -190,6 +190,7 @@ class PoFileParser(object):
             self.offset = lineno
 
         if keyword in ['msgid', 'msgid_plural']:
+            self.in_msgctxt = False
             self.in_msgid = True
             self.messages.append(_NormalizedString(arg))
 
@@ -201,7 +202,9 @@ class PoFileParser(object):
                 self.translations.append([int(idx), _NormalizedString(msg)])
             else:
                 self.translations.append([0, _NormalizedString(arg)])
+
         elif keyword == 'msgctxt':
+            self.in_msgctxt = True
             self.context = _NormalizedString(arg)
 
     def _process_string_continuation_line(self, line, lineno):
@@ -273,7 +276,7 @@ class PoFileParser(object):
             self._add_message()
 
     def _invalid_pofile(self, line, lineno, msg):
-        print("WARNING: ", msg)
+        print("WARNING:", msg)
         print("WARNING: Problem on line {}: {}".format(lineno, line))
 
 
