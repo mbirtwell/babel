@@ -62,7 +62,7 @@ class CatalogTestCase(unittest.TestCase):
     def test_add_returns_message_instance(self):
         cat = catalog.Catalog()
         message = cat.add('foo')
-        self.assertEquals('foo', message.id)
+        self.assertEqual('foo', message.id)
 
     def test_two_messages_with_same_singular(self):
         cat = catalog.Catalog()
@@ -395,13 +395,13 @@ def test_catalog_mime_headers_set_locale():
 
 def test_catalog_num_plurals():
     assert catalog.Catalog(locale='en').num_plurals == 2
-    assert catalog.Catalog(locale='ga').num_plurals == 3
+    assert catalog.Catalog(locale='ga').num_plurals == 5
 
 
 def test_catalog_plural_expr():
     assert catalog.Catalog(locale='en').plural_expr == '(n != 1)'
     assert (catalog.Catalog(locale='ga').plural_expr
-            == '(n==1 ? 0 : n==2 ? 1 : 2)')
+            == '(n==1 ? 0 : n==2 ? 1 : n>=3 && n<=6 ? 2 : n>=7 && n<=10 ? 3 : 4)')
 
 
 def test_catalog_plural_forms():
