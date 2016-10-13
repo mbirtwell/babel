@@ -277,7 +277,7 @@ class PoFileParser(object):
 
     def _invalid_pofile(self, line, lineno, msg):
         print("WARNING:", msg)
-        print("WARNING: Problem on line {}: {}".format(lineno + 1, line))
+        print("WARNING: Problem on line {0}: {1}".format(lineno + 1, line))
 
 
 def read_po(fileobj, locale=None, domain=None, ignore_obsolete=False, charset=None):

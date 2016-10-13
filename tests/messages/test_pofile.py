@@ -298,7 +298,7 @@ msgstr "mst"
         catalog = pofile.read_po(buf)
         self.assertEqual(1, len(catalog))
         message = catalog.get('mid', context="a really long message context why?")
-        self.assertIsNotNone(message)
+        assert message is not None
         self.assertEqual("a really long message context why?", message.context)
 
     def test_with_context_two(self):
