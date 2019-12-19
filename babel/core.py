@@ -56,6 +56,7 @@ def get_global(key):
     - ``territory_zones``
     - ``variant_aliases``
     - ``win_mapping``
+    - ``full_windows_zone_mapping``
     - ``zone_aliases``
     - ``zone_territories``
 
